@@ -29,6 +29,7 @@
 //----- Defines ---------------------------------------------------------------
 #define  PORT_NUM           6082      // Port number 
 #define  BCAST_IP   "192.168.130.255" // Broadcast IP
+#define  BUF_SIZE           4096
 //===== Main program ==========================================================
 void main(void)
 {
@@ -37,8 +38,8 @@ void main(void)
   struct sockaddr_in   server_addr;     // Server Internet address
   struct in_addr       server_ip_addr;  // Server IP Address
   int                  addr_len;        // Internet address length
-  char                 out_buf[4096];   // Output buffer for data
-  char                 in_buf[4096];    // Input buffer for data
+  char                 out_buf[BUF_SIZE];   // Output buffer for data
+  char                 in_buf[BUF_SIZE];    // Input buffer for data
   int                  retcode;         // Return code
   int                  iOptVal;         // Socket option value
   int                  iOptLen;         // Socket option length
@@ -56,6 +57,27 @@ void main(void)
   fgets(localuser.username, 31, stdin);
   printf("You will logged on as %s", localuser.username);
   //TODO: Check for usename clashes
+
+  //=======Create Global UDP Socket======================================//
+  client_s = socket(AF_INET, SOCK_DGRAM, 0);
+  if(lsocket < 0){
+    printf("Error creating socket");
+    exit(-1);
+  }
+
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(PORT_NUM):
+  server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+
+  iOptVal = 1;
+  iOptLen = sizeof(int);
+  setsockopt(client_s, SOL_SOCKET, SO_BROADCAST, (void*)&iOptVal, iOptLen);
+  //=====================================================================//
+
+  //Craft Hello message
+ 
+  strcpy(out_buf, "HELLO:");
+  strcat(out_buf, localuser.username);
 
   
 }
