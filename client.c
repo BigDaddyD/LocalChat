@@ -16,6 +16,9 @@
 #define  BCAST_IP   "192.168.130.255" // Broadcast IP
 #define  BUF_SIZE           4096
 
+//-----Globals-----------------------------------------------------------------
+int                  client_s;        // Client socket descriptor
+
 uint32_t get_user_ip_addr(user U){
   return U.user_ip_addr.s_addr;
 }
@@ -23,7 +26,6 @@ uint32_t get_user_ip_addr(user U){
 void main(void)
 {
   //==================Socket Fields=====================================//
-  int                  client_s;        // Client socket descriptor
   struct sockaddr_in   server_addr;     // Server Internet address
   struct in_addr       server_ip_addr;  // Server IP Address
   int                  addr_len;        // Internet address length
@@ -35,9 +37,18 @@ void main(void)
   int                  i;               // Loop control variable
   //==================================================================//
 
+  //===================Function prototypes=============================//
+  void *udpthreadr(void *arg);
+  //====================================================================//
+
   //==============LocalChat User Variables============================//
   user localuser;
   user user_table[30];
+  //==================================================================//
+
+  //===========Threads================================================//
+  pthread_t recv_thread;
+  pthread_t send_thread;
   //==================================================================//
 
   //==============================Create User=========================//
@@ -68,6 +79,24 @@ void main(void)
   strcpy(out_buf, "HELLO:");
   strcat(out_buf, localuser.username);
 
+  if(pthread_create(&recv_thread, NULL, udpthreadr, NULL)){
+    printf("Error creating thread");
+    abort();
+  }
+
+  if(pthread_join(recv_thread, NULL)){
+    printf("Error joining thread");
+    abort();
+  } 
   
+  exit(0);
 }
 
+void *udpthreadr(void *arg){
+  int i = 0;
+  for(i = 0; i<5; i++){
+    printf("Waiting for recv()...");
+    fflush(stdout);
+    sleep(1);
+  }
+}
