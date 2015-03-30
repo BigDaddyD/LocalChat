@@ -95,7 +95,7 @@ void main(void)
 void *udpthreadr(void *arg){
   int i = 0;
   for(i = 0; i<5; i++){
-    printf("Waiting for recv()...");
+    printf("Waiting for recv()...\n");
     fflush(stdout);
     sleep(1);
   }
