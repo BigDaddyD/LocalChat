@@ -15,9 +15,9 @@
 
 typedef struct users{
   struct in_addr user_ip_addr;
-  char username[33];  
+  char username[33]; 
 }user;
 
-struct in_addr get_user_ip_addr(user);
+uint32_t get_user_ip_addr(user);
 
 #endif

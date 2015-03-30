@@ -1,19 +1,4 @@
-//=========================================== file = udpClientBroadcast.c =====
-//=  A message "client" program to demonstrate sockets programming            =
-//=   - This is udpClient.c modified to use broadcast                         =
-//=============================================================================
-//=  Notes:                                                                   =
-//=       This program needs udpServer to be running on another host.         =
-//=       Program udpServer must be started first.                            =
-//=---------------------------------------------------------------------------=
-//=  Example execution: (udpServer and udpClientBroadcast on host 127.0.0.1)  =
-//=    Received from server: This is a reply message from SERVER to CLIENT    =
-//=---------------------------------------------------------------------------=
-//=  Compile:                                                                 =
-//=         Unix: gcc -o udpClientBroadcast udpClientBroadcast.c              =
-//=---------------------------------------------------------------------------=
-//=  Execute: udpClientBroadcast                                              =
-//=============================================================================
+//LocalChat Client//
 
 #include <stdio.h>        // Needed for printf()
 #include <stdlib.h>       // Needed for exit()
@@ -30,6 +15,10 @@
 #define  PORT_NUM           6082      // Port number 
 #define  BCAST_IP   "192.168.130.255" // Broadcast IP
 #define  BUF_SIZE           4096
+
+uint32_t get_user_ip_addr(user U){
+  return U.user_ip_addr.s_addr;
+}
 //===== Main program ==========================================================
 void main(void)
 {
@@ -60,13 +49,13 @@ void main(void)
 
   //=======Create Global UDP Socket======================================//
   client_s = socket(AF_INET, SOCK_DGRAM, 0);
-  if(lsocket < 0){
+  if(client_s < 0){
     printf("Error creating socket");
     exit(-1);
   }
 
   server_addr.sin_family = AF_INET;
-  server_addr.sin_port = htons(PORT_NUM):
+  server_addr.sin_port = htons(PORT_NUM);
   server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
 
   iOptVal = 1;
