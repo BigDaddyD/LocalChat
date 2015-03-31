@@ -19,9 +19,6 @@
 //-----Globals-----------------------------------------------------------------
 int                  client_s;        // Client socket descriptor
 
-uint32_t get_user_ip_addr(user U){
-  return U.user_ip_addr.s_addr;
-}
 //===== Main program ==========================================================
 void main(void)
 {
