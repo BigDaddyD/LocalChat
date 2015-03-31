@@ -9,31 +9,31 @@
 #include <arpa/inet.h>    // Needed for sockets stuff
 #include <fcntl.h>        // Needed for sockets stuff
 #include <netdb.h>        // Needed for sockets stuff
+#include <errno.h>        // Needed for debugging bind errors
 #include "user.h"
 
 //----- Defines ---------------------------------------------------------------
-#define  PORT_NUM           6082      // Port number 
+#define  PORT_NUM           6071      // Port number 
 #define  BCAST_IP   "192.168.130.255" // Broadcast IP
 #define  BUF_SIZE           4096
 
 //-----Globals-----------------------------------------------------------------
-int                  client_s;        // Client socket descriptor
+  //==================Socket Fields=====================================//
+  struct sockaddr_in   server_addr;     // Server Internet address
+  int                  addr_len;        // Internet address length
+  int                  client_s;        // Client socket descriptor
+  //==================================================================//
 
 //===== Main program ==========================================================
 void main(void)
 {
-  //==================Socket Fields=====================================//
-  struct sockaddr_in   server_addr;     // Server Internet address
-  struct in_addr       server_ip_addr;  // Server IP Address
-  int                  addr_len;        // Internet address length
+
   char                 out_buf[BUF_SIZE];   // Output buffer for data
-  char                 in_buf[BUF_SIZE];    // Input buffer for data
   int                  retcode;         // Return code
   int                  iOptVal;         // Socket option value
   int                  iOptLen;         // Socket option length
+  struct in_addr       server_ip_addr;  // Server IP Address
   int                  i;               // Loop control variable
-  //==================================================================//
-
   //===================Function prototypes=============================//
   void *udpthreadr(void *arg);
   //====================================================================//
@@ -76,10 +76,23 @@ void main(void)
   strcpy(out_buf, "HELLO:");
   strcat(out_buf, localuser.username);
 
+  retcode = bind(client_s, (struct sockaddr *)&server_addr, sizeof(server_addr));
+  if (retcode < 0)
+  {
+    char *binderror = strerror(errno);
+    printf("Error with bind: err code %s\n", binderror);
+    exit(-1);
+  }
+
+  printf("Sending message...\n");
+  retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
+                    (struct sockaddr *)&server_addr, sizeof(server_addr));
+
   if(pthread_create(&recv_thread, NULL, udpthreadr, NULL)){
     printf("Error creating thread");
     abort();
   }
+
 
   if(pthread_join(recv_thread, NULL)){
     printf("Error joining thread");
@@ -90,10 +103,21 @@ void main(void)
 }
 
 void *udpthreadr(void *arg){
+  char                 in_buf[BUF_SIZE];    // Input buffer for data
+  int retcode = 0;
   int i = 0;
   for(i = 0; i<5; i++){
-    printf("Waiting for recv()...");
+    printf("Waiting for recv()...\n");
+    //retcode = bind(client_s, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (retcode < 0)
+    {
+        printf("Error with bind\n");
+        exit(-1);
+    }
+    retcode = recvfrom(client_s, in_buf, sizeof(in_buf), 0,
+                      (struct sockaddr *)&server_addr, &addr_len);
+    printf("%s\n", in_buf);
     fflush(stdout);
-    sleep(1);
+    //sleep(0);
   }
 }
