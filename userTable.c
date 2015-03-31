@@ -38,10 +38,12 @@ user fetch_user_by_name(char* username){
   user temp;
   if(user_count == 0){
     printf("No other users online! \n");
+    strcpy(temp.username, EMPTY);
+    return temp;
   }else{
     for(i = 0; i<user_count; i++){
-      if(strcmp(user_table[user_count].username, username) == 0){
-	  return user_table[user_count];
+      if(strcmp(user_table[i].username, username) == 0){
+	  return user_table[i];
       } 
     }
     strcpy(temp.username, DNE);
@@ -49,3 +51,20 @@ user fetch_user_by_name(char* username){
   }
 }
 
+user fetch_user_by_ip(uint32_t ip){
+  int i;
+  user temp;
+  if(user_count == 0){
+    printf("No other users online! \n");
+    strcpy(temp.username, EMPTY);
+    return temp;
+  }else{
+    for(i = 0; i<user_count; i++){
+      if(get_user_ip_addr(user_table[i]) == ip){
+	return user_table[i];
+      }
+    }
+    strcpy(temp.username, DNE);
+    return temp;
+  }
+}
