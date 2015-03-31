@@ -104,9 +104,12 @@ void main(void)
 
 void *udpthreadr(void *arg){
   char                 in_buf[BUF_SIZE];    // Input buffer for data
+  char                 out_buf[BUF_SIZE];    // Output buffer for data
+  struct in_addr       client_ip_addr;  // Client IP address
   int retcode = 0;
   int i = 0;
   for(i = 0; i<5; i++){
+    printf("%dth loop\n", i);
     printf("Waiting for recv()...\n");
     //retcode = bind(client_s, (struct sockaddr *)&server_addr, sizeof(server_addr));
     if (retcode < 0)
@@ -116,6 +119,27 @@ void *udpthreadr(void *arg){
     }
     retcode = recvfrom(client_s, in_buf, sizeof(in_buf), 0,
                       (struct sockaddr *)&server_addr, &addr_len);
+
+    if (retcode < 0)
+    {
+        printf("Error with recvfrom\n");
+    }
+
+    //strtok stuff
+    char *token[4];
+    token[0] = "HELLO";
+    
+    if (strcmp(token[0], "HELLO") == 0)
+    {
+        memcpy(&client_ip_addr, &server_addr.sin_addr.s_addr, 4);
+        printf("received a hello\n");
+        printf("from %s at port %d \n", inet_ntoa(client_ip_addr), ntohs(server_addr.sin_port));
+        // if username is unique...
+        // TODO: print client_ip_addr in a couple of places to see how it's being changed 
+        retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
+                    (struct sockaddr *)&server_addr, sizeof(server_addr));
+    }
+
     printf("%s\n", in_buf);
     fflush(stdout);
     //sleep(0);
