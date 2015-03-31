@@ -11,18 +11,18 @@
 #include <netdb.h>        // Needed for sockets stuff
 #include <errno.h>        // Needed for debugging bind errors
 #include "user.h"
-
+#include "userTable.h"
 //----- Defines ---------------------------------------------------------------
 #define  PORT_NUM           6071      // Port number 
 #define  BCAST_IP   "192.168.130.255" // Broadcast IP
 #define  BUF_SIZE           4096
 
 //-----Globals-----------------------------------------------------------------
-  //==================Socket Fields=====================================//
-  struct sockaddr_in   server_addr;     // Server Internet address
-  int                  addr_len;        // Internet address length
-  int                  client_s;        // Client socket descriptor
-  //==================================================================//
+//==================Socket Fields=====================================//
+struct sockaddr_in   server_addr;     // Server Internet address
+int                  addr_len;        // Internet address length
+int                  client_s;        // Client socket descriptor
+//==================================================================//
 
 //===== Main program ==========================================================
 void main(void)
