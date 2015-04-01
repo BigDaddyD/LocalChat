@@ -1,8 +1,16 @@
 #include "userTable.h"
 
-int user_count = 0;
+int user_count = 1;
 
 user user_table[30];
+
+void show_table(){
+  int i;
+  for(i = 1; i<=user_count; i++){
+    printf("User %d: ", i);
+    print_user(user_table[i-1]);
+  }
+}
 
 void add_user(user u){
   if(user_count < 30){
@@ -15,7 +23,7 @@ void add_user(user u){
 
 void remove_user(user u){
   user temp;
-  if(user_count > 0){
+  if(user_count > 1){
     int i;
     for(i = 0; i<user_count; i++){
       if(memcmp(&u, &user_table[i], sizeof(user)) == 0){
@@ -36,35 +44,23 @@ void remove_user(user u){
 user fetch_user_by_name(char* username){
   int i;
   user temp;
-  if(user_count == 0){
-    printf("No other users online! \n");
-    strcpy(temp.username, EMPTY);
-    return temp;
-  }else{
-    for(i = 0; i<user_count; i++){
-      if(strcmp(user_table[i].username, username) == 0){
-	  return user_table[i];
-      } 
-    }
-    strcpy(temp.username, DNE);
-    return temp;
+  for(i = 0; i<user_count; i++){
+    if(strcmp(user_table[i].username, username) == 0){
+      return user_table[i];
+    } 
   }
+  strcpy(temp.username, DNE);
+  return temp;
 }
 
 user fetch_user_by_ip(uint32_t ip){
   int i;
   user temp;
-  if(user_count == 0){
-    printf("No other users online! \n");
-    strcpy(temp.username, EMPTY);
-    return temp;
-  }else{
-    for(i = 0; i<user_count; i++){
-      if(get_user_ip_addr(user_table[i]) == ip){
-	return user_table[i];
-      }
+  for(i = 0; i<user_count; i++){
+    if(get_user_ip_addr(user_table[i]) == ip){
+      return user_table[i];
     }
-    strcpy(temp.username, DNE);
-    return temp;
   }
+  strcpy(temp.username, DNE);
+  return temp;
 }

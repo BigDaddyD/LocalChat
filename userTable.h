@@ -18,4 +18,6 @@ void add_user(user u);
 
 void remove_user(user u);
 
+void show_table();
+
 #endif

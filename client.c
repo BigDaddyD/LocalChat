@@ -22,8 +22,12 @@
 struct sockaddr_in   server_addr;     // Server Internet address
 int                  addr_len;        // Internet address length
 int                  client_s;        // Client socket descriptor
+int duplicate_count = 0;
 //==================================================================//
-
+//==========================LocalChat Globals=======================//
+user localuser;
+user user_table[30];
+//==================================================================//
 //===== Main program ==========================================================
 void main(void)
 {
@@ -37,11 +41,6 @@ void main(void)
   //===================Function prototypes=============================//
   void *udpthreadr(void *arg);
   //====================================================================//
-
-  //==============LocalChat User Variables============================//
-  user localuser;
-  user user_table[30];
-  //==================================================================//
 
   //===========Threads================================================//
   pthread_t recv_thread;
@@ -71,9 +70,9 @@ void main(void)
   setsockopt(client_s, SOL_SOCKET, SO_BROADCAST, (void*)&iOptVal, iOptLen);
   //=====================================================================//
 
-  //Craft Hello message
+  //Craft Initial Hello message
  
-  strcpy(out_buf, "HELLO:");
+  strcpy(out_buf, "HELLO::");
   strcat(out_buf, localuser.username);
 
   retcode = bind(client_s, (struct sockaddr *)&server_addr, sizeof(server_addr));
@@ -106,36 +105,80 @@ void *udpthreadr(void *arg){
   char                 in_buf[BUF_SIZE];    // Input buffer for data
   char                 out_buf[BUF_SIZE];    // Output buffer for data
   struct in_addr       client_ip_addr;  // Client IP address
-  int retcode = 0;
+  user temp;
+  int retcode;
   int i = 0;
   for(i = 0; i<5; i++){
-    printf("%dth loop\n", i);
+    printf("%d loop\n", i);
+    show_table();
     printf("Waiting for recv()...\n");
+    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
     retcode = recvfrom(client_s, in_buf, sizeof(in_buf), 0,
 		       (struct sockaddr *)&server_addr, &addr_len);
-    
+    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
     if (retcode < 0)
       {
 	printf("Error with recvfrom\n");
 	exit(-1);
       }
     
-    //strtok stuff
-    char *token[4];
-    token[0] = "HELLO";
+    int tnum = 0;
+    char *tokens[4];
+    char separator[4] = "::";
+    int j = 0;
+    in_buf[strlen(in_buf)-1] = '\0';
+    tokens[j] = strtok(in_buf, separator);
+    while(tokens[j] != NULL)
+      {
+	tokens[++j] = strtok(NULL, separator);
+      }
     
-    if (strcmp(token[0], "HELLO") == 0)
-    {
-      memcpy(&client_ip_addr, &server_addr.sin_addr.s_addr, 4);
-      printf("received a hello\n");
-      printf("from %s at port %d \n", inet_ntoa(client_ip_addr), ntohs(server_addr.sin_port));
-      // if username is unique...
-      // TODO: print client_ip_addr in a couple of places to see how it's being changed 
-      retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
-		       (struct sockaddr *)&server_addr, sizeof(server_addr));
-    }
-    
-    printf("%s\n", in_buf);
+    if (strcmp(tokens[0], "HELLO") == 0)
+      {
+	printf("Received a HELLO from %s at port %d \n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+        temp = fetch_user_by_name(tokens[1]);
+	if(strcmp(temp.username, DNE) == 0)
+	  {
+	    strcpy(temp.username, tokens[1]);
+	    temp.user_ip_addr = server_addr.sin_addr;
+	    add_user(temp);
+	    show_table();
+	    if(strcmp(temp.username, localuser.username) != 0)
+	      {
+		strcpy(out_buf, "OK::");
+		strcat(out_buf, localuser.username);
+		strcat(out_buf, "::Y\n");
+		retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
+				 (struct sockaddr *)&server_addr, sizeof(server_addr));
+		printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+	      }
+	  }
+      }
+    else if(strcmp(tokens[0], "OK") == 0)
+      {
+	if(strcmp(tokens[2], "Y") == 0)
+	  {
+	    printf("Username is available\n");
+	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+	    temp = create_user(server_addr.sin_addr, tokens[1]);
+	    add_user(temp);
+	    duplicate_count = 0;
+	  }
+	else
+	  {
+	    duplicate_count++;
+	    char* d = (char *)duplicate_count;
+	    strcpy(out_buf, "HELLO::");
+	    strcat(out_buf, tokens[3]);
+	    strcat(out_buf, d);
+	    printf("Username was not available, adjusting...\n");
+	    server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+	    sendto(client_s, out_buf, (strlen(out_buf) + 1), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+	  }
+	    printf("Received an OK from %s at port %d \n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+      }
     fflush(stdout);
     //sleep(0);
   }
