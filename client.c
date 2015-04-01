@@ -51,7 +51,8 @@ void main(void)
   printf("Welcome to Local Chat! :)\n");
   printf("Please enter a desired username: \n");
   fgets(localuser.username, 31, stdin);
-  printf("You will logged on as %s", localuser.username);
+  localuser.username[strlen(localuser.username)-1] = '\0';
+  printf("You will logged on as %s\n", localuser.username);
   //TODO: Check for usename clashes
 
   //=======Create Global UDP Socket======================================//
@@ -83,15 +84,14 @@ void main(void)
     exit(-1);
   }
 
-  printf("Sending message...\n");
-  retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
-                    (struct sockaddr *)&server_addr, sizeof(server_addr));
-  
   if(pthread_create(&recv_thread, NULL, udpthreadr, NULL)){
     printf("Error creating thread");
     abort();
   }
-  
+
+  printf("Sending message...\n");
+  retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
+                    (struct sockaddr *)&server_addr, sizeof(server_addr));
 
   if(pthread_join(recv_thread, NULL)){
     printf("Error joining thread");
@@ -111,6 +111,10 @@ void *udpthreadr(void *arg){
   for(i = 0; i<5; i++){
     printf("%d loop\n", i);
     show_table();
+    char* myIP = malloc(MAXHOSTNAMELEN);
+    memset(myIP, 0, MAXHOSTNAMELEN);
+    gethostname(myIP, MAXHOSTNAMELEN);
+    struct hostent *ip_host = gethostbyname(myIP);
     printf("Waiting for recv()...\n");
     printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
     retcode = recvfrom(client_s, in_buf, sizeof(in_buf), 0,
@@ -126,7 +130,6 @@ void *udpthreadr(void *arg){
     char *tokens[4];
     char separator[4] = "::";
     int j = 0;
-    in_buf[strlen(in_buf)-1] = '\0';
     tokens[j] = strtok(in_buf, separator);
     while(tokens[j] != NULL)
       {
@@ -143,25 +146,34 @@ void *udpthreadr(void *arg){
 	    temp.user_ip_addr = server_addr.sin_addr;
 	    add_user(temp);
 	    show_table();
+	    printf("Temp: %s\n", temp.username);
+	    printf("Local: %s\n", localuser.username);
 	    if(strcmp(temp.username, localuser.username) != 0)
 	      {
+		printf("Sending an OK to\n");
+		printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
 		strcpy(out_buf, "OK::");
 		strcat(out_buf, localuser.username);
-		strcat(out_buf, "::Y\n");
+		strcat(out_buf, "::Y");
 		retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
 				 (struct sockaddr *)&server_addr, sizeof(server_addr));
-		printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+	      }
+	    else 
+	      {
+		printf("Didn't send OK b/c it's me\n");
 	      }
 	  }
       }
     else if(strcmp(tokens[0], "OK") == 0)
       {
+	printf("Received an OK...\n");
 	if(strcmp(tokens[2], "Y") == 0)
 	  {
 	    printf("Username is available\n");
 	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
 	    temp = create_user(server_addr.sin_addr, tokens[1]);
 	    add_user(temp);
+	    show_table();
 	    duplicate_count = 0;
 	  }
 	else
@@ -178,6 +190,11 @@ void *udpthreadr(void *arg){
 	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
 	  }
 	    printf("Received an OK from %s at port %d \n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+      }
+    else
+      {
+	printf("Received a mysteryyyyy packet!");
+	printf("%s\n", in_buf);
       }
     fflush(stdout);
     //sleep(0);
