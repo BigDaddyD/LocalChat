@@ -14,7 +14,8 @@ void show_table(){
 
 void add_user(user u){
   if(user_count < 30){
-    user_table[user_count] = u;
+    printf("Added user!\n");
+    user_table[user_count-1] = u;
     user_count++;
   }else{
     printf("User Table full! \n");
@@ -47,7 +48,7 @@ user fetch_user_by_name(char* username){
   for(i = 0; i<user_count; i++){
     if(strcmp(user_table[i].username, username) == 0){
       return user_table[i];
-    } 
+    }
   }
   strcpy(temp.username, DNE);
   return temp;
