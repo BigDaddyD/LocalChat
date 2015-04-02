@@ -27,16 +27,19 @@ int duplicate_count = 0;
 //==========================LocalChat Globals=======================//
 user localuser;
 user user_table[30];
+
 //==================================================================//
+
 //===== Main program ==========================================================
 void main(void)
 {
 
   char                 out_buf[BUF_SIZE];   // Output buffer for data
+  char                 comm_buf[141];   //command line buffer
   int                  retcode;         // Return code
   int                  iOptVal;         // Socket option value
   int                  iOptLen;         // Socket option length
-  struct in_addr       server_ip_addr;  // Server IP Address
+  struct in_addr       my_ip;  // Server IP Address       
   int                  i;               // Loop control variable
   //===================Function prototypes=============================//
   void *udpthreadr(void *arg);
@@ -64,7 +67,7 @@ void main(void)
 
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(PORT_NUM);
-  server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+  server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
   iOptVal = 1;
   iOptLen = sizeof(int);
@@ -75,8 +78,11 @@ void main(void)
  
   strcpy(out_buf, "HELLO::");
   strcat(out_buf, localuser.username);
+  strcpy(comm_buf, out_buf);
+    
 
   retcode = bind(client_s, (struct sockaddr *)&server_addr, sizeof(server_addr));
+
   if (retcode < 0)
   {
     char *binderror = strerror(errno);
@@ -90,16 +96,21 @@ void main(void)
   }
 
   printf("Sending message...\n");
+  server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
   retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
                     (struct sockaddr *)&server_addr, sizeof(server_addr));
-
-  if(pthread_join(recv_thread, NULL)){
-    printf("Error joining thread");
-    abort();
+  while(strcmp(comm_buf, "quit" != 0)){
+    memset(comm_buf, 0, sizeof(comm_buf));
+    fgets(comm_buf, 141, stdin);
+    comm_buf[ strlen(comm_buf)-1] = '\0'; 
   } 
   
+  server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+  retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1) ,0, (struct *)&server_a
   exit(0);
 }
+
+
 
 void *udpthreadr(void *arg){
   char                 in_buf[BUF_SIZE];    // Input buffer for data
@@ -111,15 +122,10 @@ void *udpthreadr(void *arg){
   for(i = 0; i<5; i++){
     printf("%d loop\n", i);
     show_table();
-    char* myIP = malloc(MAXHOSTNAMELEN);
-    memset(myIP, 0, MAXHOSTNAMELEN);
-    gethostname(myIP, MAXHOSTNAMELEN);
-    struct hostent *ip_host = gethostbyname(myIP);
     printf("Waiting for recv()...\n");
-    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     retcode = recvfrom(client_s, in_buf, sizeof(in_buf), 0,
 		       (struct sockaddr *)&server_addr, &addr_len);
-    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
     if (retcode < 0)
       {
 	printf("Error with recvfrom\n");
@@ -146,23 +152,36 @@ void *udpthreadr(void *arg){
 	    temp.user_ip_addr = server_addr.sin_addr;
 	    add_user(temp);
 	    show_table();
-	    printf("Temp: %s\n", temp.username);
-	    printf("Local: %s\n", localuser.username);
 	    if(strcmp(temp.username, localuser.username) != 0)
 	      {
-		printf("Sending an OK to\n");
+		printf("Sending an yes OK to\n");
 		printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+                memset(out_buf, 0, sizeof(out_buf));
 		strcpy(out_buf, "OK::");
 		strcat(out_buf, localuser.username);
 		strcat(out_buf, "::Y");
 		retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
 				 (struct sockaddr *)&server_addr, sizeof(server_addr));
+		printf("%s\n", inet_ntoa(server_addr.sin_addr));
 	      }
 	    else 
 	      {
 		printf("Didn't send OK b/c it's me\n");
 	      }
 	  }
+	else
+	   {
+	      printf("Sending an no OK to\n");
+	      printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+	      memset(out_buf, 0, sizeof(out_buf));
+	      strcpy(out_buf, "OK::");
+	      strcat(out_buf, localuser.username);
+	      strcat(out_buf, "::N::");
+	      strcat(out_buf, tokens[1]);
+	      retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
+				 (struct sockaddr *)&server_addr, sizeof(server_addr));
+	      printf("%s\n", inet_ntoa(server_addr.sin_addr));	   
+           }
       }
     else if(strcmp(tokens[0], "OK") == 0)
       {
@@ -179,22 +198,21 @@ void *udpthreadr(void *arg){
 	else
 	  {
 	    duplicate_count++;
-	    char* d = (char *)duplicate_count;
+	    char d[5];
+            itoa(duplicate_count, d, 10);
+	    memset(out_buf, 0, sizeof(out_buf));
 	    strcpy(out_buf, "HELLO::");
 	    strcat(out_buf, tokens[3]);
 	    strcat(out_buf, d);
 	    printf("Username was not available, adjusting...\n");
 	    server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
-	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
 	    sendto(client_s, out_buf, (strlen(out_buf) + 1), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-	    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
 	  }
 	    printf("Received an OK from %s at port %d \n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
       }
     else
-      {
-	printf("Received a mysteryyyyy packet!");
-	printf("%s\n", in_buf);
+	 temp = fetch_user_by_name(tokens[1]);
+         remove_user(temp); 
       }
     fflush(stdout);
     //sleep(0);
