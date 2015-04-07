@@ -123,38 +123,32 @@ void main(void)
     // Send the hello on the broadcast IP
     retcode = sendto(client_s, out_buf, strlen(out_buf) + 1, 0,
             (struct sockaddr *)&server_addr, sizeof(server_addr));
-    
-    if (pthread_join(recv_thread, NULL))
-    {
-        printf("error joining thread\n");
-        abort();
+
+    while(strcmp(comm_buf, "quit") != 0){
+      printf("Ready for a command: \n");
+      memset(comm_buf, 0, sizeof(comm_buf));
+      fgets(comm_buf, 141, stdin);
+      comm_buf[ strlen(comm_buf)-1 ] = '\0';
     }
+
+    server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+    strcpy(out_buf, "BYE::");
+    strcat(out_buf, localuser.username);
+    pthread_kill(recv_thread, 15);
+    retcode = sendto(client_s, out_buf, strlen(out_buf) + 1, 0,
+            (struct sockaddr *)&server_addr, sizeof(server_addr));
+
+    
 
     pthread_mutex_destroy(&lock);
     printf("Exiting...\n");
     exit(0);
 
-    //TODO: might want to clear comm_buf before comparing with "quit"
-    /*
-       while(strcmp(comm_buf, "quit") != 0){
-       memset(comm_buf, 0, sizeof(comm_buf));
-       fgets(comm_buf, 141, stdin);
-       comm_buf[ strlen(comm_buf)-1 ] = '\0'; 
-       } 
-       */
-
-    //pthread_mutex_lock(&lock);
-    //server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
-    //pthread_mutex_unlock(&lock);
-
-    //retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1) ,0, (struct *)&server_a
-    //        exit(0);
-    //        }
 } // end main
 
 
 void *udpthreadr(void *arg) {
-    char                 in_buf[BUF_SIZE];    // Input buffer for data
+  char                 in_buf[BUF_SIZE];    // Input buffer for data
     char                 out_buf[BUF_SIZE];    // Output buffer for data
     struct sockaddr_in   thread_addr;  // Client IP address
     user temp;
@@ -243,7 +237,6 @@ void *udpthreadr(void *arg) {
                 duplicate_count++;
                 char d[5];
                 snprintf(d, 5, "%d", duplicate_count);
-                //itoa(duplicate_count, d, 10);
                 memset(out_buf, 0, sizeof(out_buf));
                 strcpy(out_buf, "HELLO::");
                 strcat(out_buf, tokens[3]);
@@ -256,12 +249,12 @@ void *udpthreadr(void *arg) {
             printf("Received an OK from %s at port %d \n", 
                     inet_ntoa(thread_addr.sin_addr), 
                     ntohs(thread_addr.sin_port));
-        } // end else if
-        /*
-           else
+        }else if(strcmp(tokens[0], "BYE") == 0){
+	  printf("Received a BYE...\n");
            temp = fetch_user_by_name(tokens[1]);
-           remove_user(temp); 
-           */
+           remove_user(temp);
+	   show_table();
+	}
 
         fflush(stdout);
         //sleep(0);
