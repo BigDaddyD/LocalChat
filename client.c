@@ -20,7 +20,6 @@
 //-----Globals-----------------------------------------------------------------
 
 //==========================Socket Fields===========================//
-struct sockaddr_in   server_addr;     // Server Internet address
 int                  addr_len;        // Internet address length
 int                  client_s;        // Client socket descriptor
 //==================================================================//
@@ -42,7 +41,7 @@ void *udpthreadr(void *arg);
 //===== Main program ==========================================================
 void main(void)
 {
-
+    struct sockaddr_in   server_addr;         // Server Internet address
     char                 out_buf[BUF_SIZE];   // Output buffer for data
     char                 comm_buf[141];       //command line buffer
     int                  retcode;             // Return code
@@ -118,15 +117,13 @@ void main(void)
     strcat(out_buf, localuser.username);
     strcpy(comm_buf, out_buf);
 
-    pthread_mutex_lock(&lock);
     // Change the client address to the broadcast IP
     server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
-    pthread_mutex_unlock(&lock);
 
     // Send the hello on the broadcast IP
     retcode = sendto(client_s, out_buf, strlen(out_buf) + 1, 0,
             (struct sockaddr *)&server_addr, sizeof(server_addr));
-
+    
     if (pthread_join(recv_thread, NULL))
     {
         printf("error joining thread\n");
@@ -153,23 +150,25 @@ void main(void)
     //retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1) ,0, (struct *)&server_a
     //        exit(0);
     //        }
-    } // end main
+} // end main
 
 
 void *udpthreadr(void *arg) {
     char                 in_buf[BUF_SIZE];    // Input buffer for data
     char                 out_buf[BUF_SIZE];    // Output buffer for data
-    struct in_addr       client_ip_addr;  // Client IP address
+    struct sockaddr_in   thread_addr;  // Client IP address
     user temp;
     int retcode;
     int i = 0;
+    thread_addr.sin_family = AF_INET;
+    thread_addr.sin_port = htons(PORT_NUM);
     for(i = 0; i<5; i++) {
         printf("%d loop\n", i);
         show_table();
         printf("Waiting for recv()...\n");
-        server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        thread_addr.sin_addr.s_addr = htonl(INADDR_ANY);
         retcode = recvfrom(client_s, in_buf, sizeof(in_buf), 0,
-                (struct sockaddr *)&server_addr, &addr_len);
+                (struct sockaddr *)&thread_addr, &addr_len);
         if (retcode < 0)
         {
             printf("Error with recvfrom\n");
@@ -188,25 +187,25 @@ void *udpthreadr(void *arg) {
 
         if (strcmp(tokens[0], "HELLO") == 0)
         {
-            printf("Received a HELLO from %s at port %d \n", inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+            printf("Received a HELLO from %s at port %d \n", inet_ntoa(thread_addr.sin_addr), ntohs(thread_addr.sin_port));
             temp = fetch_user_by_name(tokens[1]);
             if(strcmp(temp.username, DNE) == 0)
             {
                 strcpy(temp.username, tokens[1]);
-                temp.user_ip_addr = server_addr.sin_addr;
+                temp.user_ip_addr = thread_addr.sin_addr;
                 add_user(temp);
                 show_table();
                 if(strcmp(temp.username, localuser.username) != 0)
                 {
                     printf("Sending an yes OK to\n");
-                    printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+                    printf("IP: %s\n", inet_ntoa(thread_addr.sin_addr));
                     memset(out_buf, 0, sizeof(out_buf));
                     strcpy(out_buf, "OK::");
                     strcat(out_buf, localuser.username);
                     strcat(out_buf, "::Y");
                     retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
-                            (struct sockaddr *)&server_addr, sizeof(server_addr));
-                    printf("%s\n", inet_ntoa(server_addr.sin_addr));
+				     (struct sockaddr *)&thread_addr, sizeof(thread_addr));
+                    printf("%s\n", inet_ntoa(thread_addr.sin_addr));
                 }
                 else 
                 {
@@ -216,15 +215,15 @@ void *udpthreadr(void *arg) {
             else
             {
                 printf("Sending an no OK to\n");
-                printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
+                printf("IP: %s\n", inet_ntoa(thread_addr.sin_addr));
                 memset(out_buf, 0, sizeof(out_buf));
                 strcpy(out_buf, "OK::");
                 strcat(out_buf, localuser.username);
                 strcat(out_buf, "::N::");
                 strcat(out_buf, tokens[1]);
                 retcode = sendto(client_s, out_buf, (strlen(out_buf) + 1), 0,
-                        (struct sockaddr *)&server_addr, sizeof(server_addr));
-                printf("%s\n", inet_ntoa(server_addr.sin_addr));	   
+                        (struct sockaddr *)&thread_addr, sizeof(thread_addr));
+                printf("%s\n", inet_ntoa(thread_addr.sin_addr));	   
             }
         }
         else if(strcmp(tokens[0], "OK") == 0)
@@ -233,8 +232,8 @@ void *udpthreadr(void *arg) {
             if(strcmp(tokens[2], "Y") == 0)
             {
                 printf("Username is available\n");
-                printf("IP: %s\n", inet_ntoa(server_addr.sin_addr));
-                temp = create_user(server_addr.sin_addr, tokens[1]);
+                printf("IP: %s\n", inet_ntoa(thread_addr.sin_addr));
+                temp = create_user(thread_addr.sin_addr, tokens[1]);
                 add_user(temp);
                 show_table();
                 duplicate_count = 0;
@@ -250,13 +249,13 @@ void *udpthreadr(void *arg) {
                 strcat(out_buf, tokens[3]);
                 strcat(out_buf, d);
                 printf("Username was not available, adjusting...\n");
-                server_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+                thread_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
                 sendto(client_s, out_buf, (strlen(out_buf) + 1), 0, 
-                        (struct sockaddr *)&server_addr, sizeof(server_addr));
+                        (struct sockaddr *)&thread_addr, sizeof(thread_addr));
             }
             printf("Received an OK from %s at port %d \n", 
-                    inet_ntoa(server_addr.sin_addr), 
-                    ntohs(server_addr.sin_port));
+                    inet_ntoa(thread_addr.sin_addr), 
+                    ntohs(thread_addr.sin_port));
         } // end else if
         /*
            else
