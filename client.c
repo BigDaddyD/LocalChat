@@ -169,6 +169,8 @@ void *udpthreadr(void *arg) {
             exit(-1);
         }
 
+        printf("Received a message: %s\n", in_buf);
+
         int tnum = 0;
         char *tokens[4];
         char separator[4] = "::";
@@ -232,6 +234,9 @@ void *udpthreadr(void *arg) {
                 show_table();
                 duplicate_count = 0;
             }
+            //FIXME: When picking a new username, the client that tried to use a 
+            //       duplicate username adds itself multiple times as it tries 
+            //       to pick a new username
             else
             {
                 duplicate_count++;
@@ -249,12 +254,15 @@ void *udpthreadr(void *arg) {
             printf("Received an OK from %s at port %d \n", 
                     inet_ntoa(thread_addr.sin_addr), 
                     ntohs(thread_addr.sin_port));
-        }else if(strcmp(tokens[0], "BYE") == 0){
-	  printf("Received a BYE...\n");
-           temp = fetch_user_by_name(tokens[1]);
-           remove_user(temp);
-	   show_table();
-	}
+        } 
+        //FIXME: Bye's aren't acknowledged (we don't know whether byes are being
+        //       sent or received)
+        else if(strcmp(tokens[0], "BYE") == 0) {
+            printf("Received a BYE...\n");
+            temp = fetch_user_by_name(tokens[1]);
+            remove_user(temp);
+            show_table();
+        }
 
         fflush(stdout);
         //sleep(0);
