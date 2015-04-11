@@ -20,4 +20,6 @@ void remove_user(user u);
 
 void show_table();
 
+void clear_table();
+
 #endif

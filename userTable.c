@@ -13,9 +13,10 @@ void show_table(){
 }
 
 void add_user(user u){
-  printf("Added user!\n");
+  //printf("Added user!\n");
   user_table[user_count] = u;
   user_count++;
+  show_table();
 }
 
 void remove_user(user u){
@@ -30,8 +31,9 @@ void remove_user(user u){
       user_count--;
       return;
     }
-    printf("User not found! \n");
   }
+  show_table();
+  //printf("User not found! \n");
 }
 
 user fetch_user_by_name(char* username){
@@ -56,4 +58,9 @@ user fetch_user_by_ip(uint32_t ip){
   }
   strcpy(temp.username, DNE);
   return temp;
+}
+
+void clear_table() {
+    memset(user_table, 0, sizeof(user) * 30); 
+    user_count = 0;
 }
