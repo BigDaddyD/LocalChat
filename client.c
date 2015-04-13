@@ -252,9 +252,7 @@ void *udpthread(void *arg) {
 	    sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0, 
 		   (struct sockaddr *)&thread_addr, sizeof(thread_addr));
 	  }
-	printf("Received an OK from %s at port %d \n", 
-	       inet_ntoa(thread_addr.sin_addr), 
-	       ntohs(thread_addr.sin_port));
+
       } 
     else if(strcmp(tokens[0], "BYE") == 0) {
       temp = fetch_user_by_name(tokens[1]);
