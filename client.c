@@ -135,6 +135,8 @@ void main(void)
     strcpy(out_buf, "BYE::");
     strcat(out_buf, localuser.username);
     pthread_kill(recv_thread, 15);
+    printf("Bye IP: %s\n", inet_ntoa(server_addr.sin_addr));
+    printf("outbuf: %s", out_buf);
     retcode = sendto(client_s, out_buf, strlen(out_buf) + 1, 0,
             (struct sockaddr *)&server_addr, sizeof(server_addr));
 
