@@ -13,15 +13,19 @@
 #include "user.h"
 #include "userTable.h"
 //----- Defines ---------------------------------------------------------------
-#define  PORT_NUM           6071      // Port number 
-#define  BCAST_IP   "192.168.130.255" // Broadcast IP
-#define  BUF_SIZE           4096
+#define  UDP_PORT_NUM           6071      // UDP Port number
+#define  TCP_PORT_NUM           6072      // TCP Port number 
+#define  BCAST_IP   "192.168.130.255"     // Broadcast IP
+#define  BUF_SIZE               4096      // Max Buffer Size
 
 //-----Globals-----------------------------------------------------------------
 
 //==========================Socket Fields===========================//
 int                  addr_len;        // Internet address length
-int                  udp_s;        // Client socket descriptor
+int                  udp_s;           // UDP Client socket descriptor
+int                  tcp_s;           // TCP Client socket descriptor
+char                 t_separator[4] = "::";
+char                 m_separator[3] = " ";
 //==================================================================//
 
 //==========================LocalChat Globals=======================//
@@ -38,6 +42,7 @@ pthread_mutex_t lock;
 void *udpthread(void *arg);
 void *tcpthread(void *arg);
 void show_cmds(void);
+void str_tok(char** array, char* string, char* separator);
 //====================================================================//
 
 //=====Main localchat interface==============================================
@@ -73,16 +78,22 @@ void main(void)
   
   //=======Create Global UDP Socket======================================//
   udp_s = socket(AF_INET, SOCK_DGRAM, 0);  // Create the socket
+  tcp_s = socket(AF_INET, SOCK_DGRAM, 0);
   
   if(udp_s < 0)
     {
-      printf("Error creating socket");
+      printf("Error creating udp socket\n");
         exit(-1);
+    }
+  if(tcp_s < 0)
+    {
+      printf("Error creating tcp socket\n");
+      exit(-1);
     }
 
   // Set up the client's Internet address
   client_addr.sin_family = AF_INET;
-  client_addr.sin_port = htons(PORT_NUM);
+  client_addr.sin_port = htons(UDP_PORT_NUM);
   client_addr.sin_addr.s_addr = htonl(INADDR_ANY);    // Send and receive on
   // any IP
   
@@ -97,16 +108,35 @@ void main(void)
   if (retcode < 0)
     {
       char *binderror = strerror(errno);
-      printf("Error with bind: err code %s\n", binderror);
+      printf("Error with udp bind: err code %s\n", binderror);
       exit(-1);
     }
+
+  client_addr.sin_port = htons(TCP_PORT_NUM);
+
+  retcode = bind(tcp_s, (struct sockaddr *)&client_addr, sizeof(client_addr));
+
+   if (retcode < 0)
+    {
+      char *binderror = strerror(errno);
+      printf("Error with tcp bind: err code %s\n", binderror);
+      exit(-1);
+    }
+   
+   listen(tcp_s, 100);
   
   // Create the udp thread to begin listening for HELLO's, OK's, BYE's
   if(pthread_create(&udp_thread, NULL, udpthread, NULL))
     {
-      printf("Error creating thread");
+      printf("Error creating udp thread");
       abort();
     }
+
+    if(pthread_create(&tcp_thread, NULL, tcpthread, NULL))
+  {
+    printf("Error creating tcp thread");
+    abort();
+  }
   
   // Now we're ready to send a HELLO message to other peers
   printf("Sending HELLO message...\n");
@@ -118,7 +148,7 @@ void main(void)
   
   // Change the client address to the broadcast IP
   client_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
-  
+  client_addr.sin_port = htons(UDP_PORT_NUM);
   // Send the hello on the broadcast IP
   retcode = sendto(udp_s, out_buf, strlen(out_buf) + 1, 0,
 		   (struct sockaddr *)&client_addr, sizeof(client_addr));
@@ -131,11 +161,12 @@ void main(void)
     if (strcmp(comm_buf, "show") == 0)
       {
         show_table();
-      } else if (strcmp(comm_buf, "help") == 0)
+      } 
+    else if (strcmp(comm_buf, "help") == 0)
       {
         show_cmds();
       }
-    else
+    else if(strcmp(comm_buf, "quit") != 0)
       {
         printf("Invalid command\n");
         show_cmds();
@@ -165,6 +196,21 @@ void main(void)
 } // end main
 
 /*
+ * TCp thread to handle messaging sessions
+ */
+
+void *tcpthread(void *args){
+  char in_buf[BUF_SIZE];
+  char out_buf[BUF_SIZE];
+  struct sockaddr_in thread_addr;
+  user temp;
+  int retcode;
+  thread_addr.sin_family = AF_INET;
+  thread_addr.sin_port = htons(TCP_PORT_NUM);
+  char *tokens[2];
+}
+
+/*
  * UDP thread to handle HELLO, OK, and BYE packet processing
  */
 
@@ -173,11 +219,10 @@ void *udpthread(void *arg) {
   char                 out_buf[BUF_SIZE];    // Output buffer for data
   struct sockaddr_in   thread_addr;  // Client IP address
   user temp;
+  char *tokens[4];
   int retcode;
   thread_addr.sin_family = AF_INET;
-  thread_addr.sin_port = htons(PORT_NUM);
-  char *tokens[4];
-  char separator[4] = "::";
+  thread_addr.sin_port = htons(UDP_PORT_NUM);
   do {
     thread_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     retcode = recvfrom(udp_s, in_buf, sizeof(in_buf), 0,
@@ -188,14 +233,7 @@ void *udpthread(void *arg) {
 	exit(-1);
       }
     
-    
-    int tnum = 0;
-    int j = 0;
-    tokens[j] = strtok(in_buf, separator);
-    while(tokens[j] != NULL)
-      {
-	tokens[++j] = strtok(NULL, separator);
-      }
+    str_tok(tokens, in_buf, t_separator);
     
     if (strcmp(tokens[0], "HELLO") == 0)
       {
@@ -263,14 +301,20 @@ void *udpthread(void *arg) {
   } while (strcmp(tokens[0], "BYE") != 0);
 } // end udpthread
 
-void *tcpthread(void *args){
-  
-}
-
 void show_cmds(void)
 {
   printf("Valid Commands:\n");
   printf(" show: Shows online users\n");
   printf(" help: Shows this list of commands\n");
   printf(" quit: Terminates LocalChat :(\n");
+}
+
+void str_tok(char** array, char* string, char* seperator){
+
+  int i = 0;
+  array[i] = strtok(string, seperator);
+  while(array[i] != NULL)
+    {
+      array[++i] = strtok(NULL, seperator);
+    }
 }
