@@ -13,8 +13,8 @@
 #include "user.h"
 #include "userTable.h"
 //----- Defines ---------------------------------------------------------------
-#define  UDP_PORT_NUM           6071      // UDP Port number
-#define  TCP_PORT_NUM           6072      // TCP Port number 
+#define  UDP_PORT_NUM           7001      // UDP Port number
+#define  TCP_PORT_NUM           7002      // TCP Port number 
 #define  BCAST_IP   "192.168.130.255"     // Broadcast IP
 #define  BUF_SIZE               4096      // Max Buffer Size
 
@@ -43,6 +43,7 @@ pthread_mutex_t lock;
 void *udpthread(void *arg);
 void *tcpthreadl(void *arg);
 void *tcpthreadr(void *arg);
+void *chatthread(void *arg);
 void show_cmds(void);
 void str_tok(char** array, char* string, char* separator);
 //====================================================================//
@@ -64,6 +65,7 @@ void main(void)
   pthread_t udp_thread;
   pthread_t tcp_threadl;
   pthread_t tcp_threadr;
+  pthread_t chat_thread;
 
   pthread_mutex_init(&lock, NULL);    // Create the mutex
   //==================================================================//
@@ -92,12 +94,12 @@ void main(void)
     }
   if(tcpl_s < 0)
     {
-      printf("Error creating tcp socket\n");
+      printf("Error creating listening tcp socket\n");
       exit(-1);
     }
   if(tcpr_s < 0)
     {
-      printf("Error creating tcp socket\n");
+      printf("Error creating receiving tcp socket\n");
       exit(-1);
     }
 
@@ -232,8 +234,7 @@ void *tcpthreadl(void *args){
   int local_s;
   local_s = accept(tcpl_s, (struct sockaddr *)&thread_addr, &addr_len);
   
-  recvfrom(local_s, in_buf, sizeof(in_buf), 0,
-		       (struct sockaddr *)&thread_addr, &addr_len);
+  recv(local_s, in_buf, sizeof(in_buf), 0);
   if (retcode < 0)
       {
 	printf("Error with recvfrom in tcpthreadl\n");
@@ -241,6 +242,10 @@ void *tcpthreadl(void *args){
       }
 
   printf("In_buf: %s\n", in_buf); 
+
+  if(strcmp(in_buf, "CHATREQ") == 0){
+    printf("You have received a chat request from %s\n", inet_ntoa(thread_addr.sin_addr)); 
+  }
   fflush(stdout);
 }
 
@@ -264,8 +269,7 @@ void *tcpthreadr(void *args){
 	exit(-1);
       }
   strcpy(out_buf, "CHATREQ");
-  retcode = sendto(tcpr_s, out_buf, (strlen(out_buf) + 1), 0,
-		   (struct sockaddr *)&thread_addr, sizeof(thread_addr));
+  retcode = send(tcpr_s, out_buf, (strlen(out_buf) + 1), 0);
   if (retcode < 0)
       {
 	printf("Error with sendto in tcpthreadr\n");
