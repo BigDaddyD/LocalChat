@@ -1,5 +1,6 @@
 //LocalChat Client//
 
+#include <unistd.h>
 #include <stdio.h>        // Needed for printf()
 #include <stdlib.h>       // Needed for exit()
 #include <string.h>       // Needed for memcpy() and strcpy()
@@ -24,9 +25,17 @@
 int                  addr_len;        // Internet address length
 int                  udp_s;           // UDP Client socket descriptor
 int                  tcpl_s;          // TCP Client listening socket descriptor
-int                  tcpr_s;          // TCP Client requesting socket descriptor 
+int                  tcpr_s;          // TCP Client requesting socket descriptor
+int                  main_bool = 0;
+int                  tcpl_bool = 0;
+int                  tcpa_bool = 0;
+int                  tcpm_bool = 0; 
 char                 t_separator[4] = "::";
 char                 m_separator[3] = " ";
+char                 main_buf[BUF_SIZE];
+char                 tcpl_buf[BUF_SIZE];
+char                 tcpa_buf[BUF_SIZE];
+char                 tcpm_buf[BUF_SIZE];
 //==================================================================//
 
 //==========================LocalChat Globals=======================//
@@ -44,6 +53,7 @@ void *udpthread(void *arg);
 void *tcpthreadl(void *arg);
 void *tcpthreadr(void *arg);
 void *chatthread(void *arg);
+void *inputthread(void *arg);
 void show_cmds(void);
 void str_tok(char** array, char* string, char* separator);
 //====================================================================//
@@ -66,6 +76,7 @@ void main(void)
   pthread_t tcp_threadl;
   pthread_t tcp_threadr;
   pthread_t chat_thread;
+  pthread_t input_thread;
 
   pthread_mutex_init(&lock, NULL);    // Create the mutex
   //==================================================================//
@@ -81,6 +92,12 @@ void main(void)
   localuser.username[strlen(localuser.username)-1] = '\0';
   
   printf("You will logged on as %s\n", localuser.username);
+
+  if(pthread_create(&input_thread, NULL, inputthread, NULL))
+     {
+       printf("Error creating input thread");
+       abort();
+     }
   
   //=======Create Global UDP Socket======================================//
   udp_s = socket(AF_INET, SOCK_DGRAM, 0);  // Create the sockets
@@ -165,33 +182,44 @@ void main(void)
    retcode = sendto(udp_s, out_buf, strlen(out_buf) + 1, 0,
 		    (struct sockaddr *)&client_addr, sizeof(client_addr));
    
-   while(strcmp(comm_buf, "quit") != 0){
+   while(strcmp(comm_buf, "quit") != 0){ 
      printf("Ready for a command: \n");
      memset(comm_buf, 0, sizeof(comm_buf));
-     fgets(comm_buf, 141, stdin);
+     main_bool = 1;
+     pthread_mutex_lock(&lock);
+     if(strlen(main_buf) != 0){
+       strcpy(comm_buf, main_buf);
+       main_bool = 0;
+     }
+     pthread_mutex_unlock(&lock);
+     usleep(50000);
+     //fgets(comm_buf, 141, stdin);
      comm_buf[ strlen(comm_buf)-1 ] = '\0';
      str_tok(tokens, comm_buf, m_separator);
-     if (strcmp(tokens[0], "show") == 0)
+     if(tokens[0])
        {
-	 show_table();
-       } 
-     else if (strcmp(tokens[0], "help") == 0)
-       {
-	 show_cmds();
-       }
-     else if(strcmp(tokens[0], "chat") == 0) 
-       {
-	 user tuser = fetch_user_by_name(tokens[1]);
-	 if(pthread_create(&tcp_threadr, NULL, tcpthreadr, (void *)&tuser))
+	 if (strcmp(tokens[0], "show") == 0)
 	   {
-	     printf("Error creating tcp thread");
-	     abort();
+	     show_table();
+	   } 
+	 else if (strcmp(tokens[0], "help") == 0)
+	   {
+	     show_cmds();
 	   }
-       }
-     else if(strcmp(tokens[0], "quit") != 0)
-       {
-	 printf("Invalid command\n");
-	 show_cmds();
+	 else if(strcmp(tokens[0], "chat") == 0) 
+	   {
+	     user tuser = fetch_user_by_name(tokens[1]);
+	     if(pthread_create(&tcp_threadr, NULL, tcpthreadr, (void *)&tuser))
+	       {
+		 printf("Error creating tcp thread");
+		 abort();
+	       }
+	   }
+	 else if(strcmp(tokens[0], "quit") != 0)
+	   {
+	     printf("Invalid command\n");
+	     show_cmds();
+	   }
        }
    }
    
@@ -386,4 +414,30 @@ void str_tok(char** array, char* string, char* seperator){
     {
       array[++i] = strtok(NULL, seperator);
     }
+}
+
+void *inputthread(void *arg){
+  char local_buf[BUF_SIZE];
+  while(1){
+    memset(local_buf, 0, sizeof(local_buf));
+    pthread_mutex_lock(&lock);
+    memset(main_buf, 0, sizeof(main_buf));
+    memset(tcpl_buf, 0, sizeof(tcpl_buf));
+    memset(tcpa_buf, 0, sizeof(tcpa_buf));
+    memset(tcpm_buf, 0, sizeof(tcpm_buf));
+
+    fgets(local_buf, BUF_SIZE, stdin);
+
+    if(main_bool){
+      strcpy(main_buf, local_buf);
+    }else if(tcpl_bool){
+      strcpy(tcpl_buf, local_buf);
+    }else if(tcpa_bool){
+      strcpy(tcpa_buf, local_buf);
+    }else if(tcpm_bool){
+      strcpy(tcpm_buf, local_buf);
+    }
+    pthread_mutex_unlock(&lock);
+    usleep(50000);
+  }
 }
