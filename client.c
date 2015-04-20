@@ -182,19 +182,22 @@ void main(void)
    // Send the hello on the broadcast IP
    retcode = sendto(udp_s, out_buf, strlen(out_buf) + 1, 0,
 		    (struct sockaddr *)&client_addr, sizeof(client_addr));
-   
+   main_bool = 1;
    while(strcmp(comm_buf, "quit") != 0){ 
-     printf("Ready for a command: \n");
-     memset(comm_buf, 0, sizeof(comm_buf));
-     main_bool = 1;
      pthread_mutex_lock(&lock);
-     if(strlen(main_buf) != 0){
-       strcpy(comm_buf, main_buf);
-       main_bool = 0;
-     }
-     pthread_mutex_unlock(&lock);
-     usleep(50000);
-     //fgets(comm_buf, 141, stdin);
+     if(main_bool)
+       {
+	 printf("Ready for a command: \n");
+	 memset(comm_buf, 0, sizeof(comm_buf));
+	 if(strlen(main_buf) != 0)
+	   {
+	     strcpy(comm_buf, main_buf);
+	     main_bool = 0;
+	   }
+
+	 usleep(50000);
+       }
+     
      comm_buf[ strlen(comm_buf)-1 ] = '\0';
      str_tok(tokens, comm_buf, m_separator);
      if(tokens[0])
@@ -222,7 +225,10 @@ void main(void)
 	     show_cmds();
 	   }
        }
+     pthread_mutex_unlock(&lock);
    }
+  
+
    
    client_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
    strcpy(out_buf, "BYE::");
@@ -273,32 +279,53 @@ void *tcpthreadl(void *args){
   printf("In_buf: %s\n", in_buf); 
 
   if(strcmp(in_buf, "CHATREQ") == 0){
-    printf("You have received a chat request from %s\n", fetch_user_by_ip(thread_addr.sin_addr.s_addr).username);
-
-    printf("Would you like to chat with this person? (y or n)\n");
+    printf("You have received a chat request from %s\n", inet_ntoa(thread_addr.sin_addr));
     
-    memset(out_buf, 0, sizeof(out_buf));
-    tcpl_bool = 1;
-    pthread_mutex_lock(&lock);
-    strcpy(out_buf, tcpl_buf);
-    while(1){
-      if(strcmp(out_buf, "yes") == 0 && !chat_bool){
-	strcpy(out_buf, "CHATY");
-	send(local_s, out_buf, sizeof(out_buf));
-	chat_bool = 1;
-	tcpl_bool = 0;
-	break;
-      }else if(strcmp(out_buf, "no") == 0 || chat_bool){
-	strcpy(out_buf, "CHATN");
-	send(local_s, out_buf, sizeof(out_buf));
+    if(!chat_bool)
+      {
+	pthread_mutex_lock(&lock);
 	tcpl_bool = 1;
-	break;
-      }else{
-	printf("Invalid response\n");
+	main_bool = 0;
+	pthread_mutex_unlock(&unlock);
+	while(1)
+	  {
+	    printf("Would you like to chat with this person? (y or n)\n");
+	    memset(out_buf, 0, sizeof(out_buf));
+	    pthread_mutex_lock(&lock);
+	    strcpy(out_buf, tcpl_buf);
+	    printf("%s", out_buf);
+	    out_buf[strlen(out_buf) - 1] = '\0';
+	    if(strcmp(out_buf, "y") == 0)
+	      {
+		strcpy(out_buf, "CHATY");
+		send(local_s, out_buf, sizeof(out_buf), 0);
+		chat_bool = 1;
+		tcpl_bool = 0;
+		//create chat thread
+		break;
+	      }
+	    else if(strcmp(out_buf, "n") == 0)
+	      {
+		strcpy(out_buf, "CHATN");
+		send(local_s, out_buf, sizeof(out_buf), 0);
+		tcpl_bool = 0;
+		main_bool = 1;
+		break;
+	      }
+	    else
+	      {
+		printf("Invalid response\n");
+		printf("Valid responses are (n)o or (y)es\n");
+	      }
+	    pthread_mutex_unlock(&lock);
+	    usleep(50000);
+	  }
       }
-      pthread_mutex_unlock(&lock);
-      usleep(50000);
-    }
+    else
+      {
+	strcpy(out_buf, "CHATN");
+	send(local_s, out_buf, sizeof(out_buf), 0);
+      }
   }
   fflush(stdout);
 }
@@ -326,9 +353,29 @@ void *tcpthreadr(void *args){
   retcode = send(tcpr_s, out_buf, (strlen(out_buf) + 1), 0);
   if (retcode < 0)
       {
-	printf("Error with sendto in tcpthreadr\n");
+	printf("Error with send in tcpthreadr\n");
 	exit(-1);
       }
+  
+  retcode = recv(tcpr_s, in_buf, sizeof(in_buf), 0);
+  if (retcode < 0)
+    {
+      printf("Error with recv in tcpthreadr\n");
+      exit(-1);
+    }
+  
+  pthread_mutex_lock(&lock);
+  if(strcmp(in_buf, "CHATY") == 0){
+    //create chat thread
+    chat_bool = 1;
+    tcpm_bool = 1;
+    tcpa_bool = 0;
+  }else{
+    main_bool = 1;
+    tcpa_bool = 0;
+    printf("Client declined chat\n");
+  }
+  pthread_mutex_unlock(&unlock);
   fflush(stdout);
 }
 
