@@ -29,7 +29,8 @@ int                  tcpr_s;          // TCP Client requesting socket descriptor
 int                  main_bool = 0;
 int                  tcpl_bool = 0;
 int                  tcpa_bool = 0;
-int                  tcpm_bool = 0; 
+int                  tcpm_bool = 0;
+int                  chat_bool = 0; 
 char                 t_separator[4] = "::";
 char                 m_separator[3] = " ";
 char                 main_buf[BUF_SIZE];
@@ -272,7 +273,32 @@ void *tcpthreadl(void *args){
   printf("In_buf: %s\n", in_buf); 
 
   if(strcmp(in_buf, "CHATREQ") == 0){
-    printf("You have received a chat request from %s\n", inet_ntoa(thread_addr.sin_addr)); 
+    printf("You have received a chat request from %s\n", fetch_user_by_ip(thread_addr.sin_addr.s_addr).username);
+
+    printf("Would you like to chat with this person? (y or n)\n");
+    
+    memset(out_buf, 0, sizeof(out_buf));
+    tcpl_bool = 1;
+    pthread_mutex_lock(&lock);
+    strcpy(out_buf, tcpl_buf);
+    while(1){
+      if(strcmp(out_buf, "yes") == 0 && !chat_bool){
+	strcpy(out_buf, "CHATY");
+	send(local_s, out_buf, sizeof(out_buf));
+	chat_bool = 1;
+	tcpl_bool = 0;
+	break;
+      }else if(strcmp(out_buf, "no") == 0 || chat_bool){
+	strcpy(out_buf, "CHATN");
+	send(local_s, out_buf, sizeof(out_buf));
+	tcpl_bool = 1;
+	break;
+      }else{
+	printf("Invalid response\n");
+      }
+      pthread_mutex_unlock(&lock);
+      usleep(50000);
+    }
   }
   fflush(stdout);
 }
@@ -304,6 +330,18 @@ void *tcpthreadr(void *args){
 	exit(-1);
       }
   fflush(stdout);
+}
+
+/* 
+ * Main TCP Chat thread
+ */
+
+void *chatthread(void *arg){
+  char in_buf[BUF_SIZE];
+  char out_buf[BUF_SIZE];
+  int retcode;
+  char *tokens[2];
+  
 }
 
 /*
