@@ -53,7 +53,8 @@ pthread_mutex_t lock;
 void *udpthread(void *arg);
 void *tcpthreadl(void *arg);
 void *tcpthreadr(void *arg);
-void *chatthread(void *arg);
+void *chatsthread(void *arg);
+void *chatrthread(void *arg);
 void *inputthread(void *arg);
 void show_cmds(void);
 void str_tok(char** array, char* string, char* separator);
@@ -76,8 +77,9 @@ void main(void)
   pthread_t udp_thread;
   pthread_t tcp_threadl;
   pthread_t tcp_threadr;
-  pthread_t chat_thread;
   pthread_t input_thread;
+  pthread_t chats_thread;
+  pthread_t chatr_thread;
 
   pthread_mutex_init(&lock, NULL);    // Create the mutex
   //==================================================================//
@@ -194,8 +196,6 @@ void main(void)
 	     strcpy(comm_buf, main_buf);
 	     main_bool = 0;
 	   }
-
-	 usleep(50000);
        }
      
      comm_buf[ strlen(comm_buf)-1 ] = '\0';
@@ -226,6 +226,7 @@ void main(void)
 	   }
        }
      pthread_mutex_unlock(&lock);
+     usleep(50000);
    }
   
 
@@ -380,15 +381,29 @@ void *tcpthreadr(void *args){
 }
 
 /* 
- * Main TCP Chat thread
+ * Main TCP Chat send thread
  */
 
-void *chatthread(void *arg){
+void *chatsthread(void *arg){
   char in_buf[BUF_SIZE];
   char out_buf[BUF_SIZE];
   int retcode;
   char *tokens[2];
+  int local_s = (int)arg;
+
   
+}
+
+/*
+ * Main TCP Chat receive thread
+ */
+
+void *chatrthread(void *arg){
+  char in_buf[BUF_SIZE];
+  char out_buf[BUF_SIZE];
+  int retcode;
+  char *tokens[2];
+  int local_s = (int)arg;
 }
 
 /*
