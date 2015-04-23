@@ -301,8 +301,9 @@ void *tcpthreadl(void *args){
 		strcpy(out_buf, "CHATY");
 		send(local_s, out_buf, sizeof(out_buf), 0);
 		chat_bool = 1;
+		tcpm_bool = 1;
 		tcpl_bool = 0;
-		//create chat thread
+		
 		break;
 	      }
 	    else if(strcmp(out_buf, "n") == 0)
@@ -366,16 +367,28 @@ void *tcpthreadr(void *args){
     }
   
   pthread_mutex_lock(&lock);
-  if(strcmp(in_buf, "CHATY") == 0){
-    //create chat thread
-    chat_bool = 1;
-    tcpm_bool = 1;
-    tcpa_bool = 0;
-  }else{
-    main_bool = 1;
-    tcpa_bool = 0;
-    printf("Client declined chat\n");
-  }
+  if(strcmp(in_buf, "CHATY") == 0)
+    {
+      chat_bool = 1;
+      tcpm_bool = 1;
+      tcpa_bool = 0;
+      if(pthread_create(&chatr_thread, NULL, chatrthread, (void *)tcpr_s))
+	{
+	  printf("Error creating chat receive thread");
+	  abort();
+	}
+      if(pthread_create(&chats_thread, NULL, chatsthread, (void *)tcpr_s))
+	{
+	  printf("Error creating chat receive thread");
+	  abort();
+	}
+    }
+  else
+    {
+      main_bool = 1;
+      tcpa_bool = 0;
+      printf("Client declined chat\n");
+    }
   pthread_mutex_unlock(&unlock);
   fflush(stdout);
 }
@@ -385,13 +398,31 @@ void *tcpthreadr(void *args){
  */
 
 void *chatsthread(void *arg){
-  char in_buf[BUF_SIZE];
   char out_buf[BUF_SIZE];
   int retcode;
   char *tokens[2];
   int local_s = (int)arg;
-
   
+  do
+    {
+      pthread_mutex_lock(&lock);
+      strcpy(out_buf, tcpm_buf);
+      retcode = send(local_s, out_buf, sizeof(out_buf), 0);
+      if(retcode < 0)
+	{
+	  printf("Error with chat send\n");
+	  exit(-1);
+	}
+      if(strcmp(out_buf, "ENDCHAT") == 0)
+	{
+	  printf("Ending chat session\n");
+	  close(local_s);
+	  main_bool = 1;
+	  chat_bool = 0;
+	  tcpm_bool = 0;
+	}
+      pthread_mutex_unlock(&lock);
+    }while(strcmp(out_buf, "ENDCHAT") != 0);
 }
 
 /*
@@ -399,11 +430,36 @@ void *chatsthread(void *arg){
  */
 
 void *chatrthread(void *arg){
-  char in_buf[BUF_SIZE];
   char out_buf[BUF_SIZE];
   int retcode;
   char *tokens[2];
   int local_s = (int)arg;
+
+  do
+    {
+      retcode = recv(tcpr_s, in_buf, sizeof(in_buf));
+      if(retcode < 0)
+	{
+	  printf("Error with chat receive\n");
+	  exit(-1);
+	}
+      
+      if(strcmp(in_buf, "ENDCHAT") == 0)
+	{
+	  printf("Chat session has been ended\n");
+	  pthread_mutex_lock(&lock);
+	  chatbool = 0;
+	  tcpm_bool = 0;
+	  main_bool = 1;
+	  retcode = close(tcpr_s);
+	  pthread_mutex_unlock(&lock);
+	}
+      else
+	{
+	  str_tok(tokens, in_buf, separator);
+	  printf(tokens[1]);
+	}
+    }while(strcmp(in_buf, "ENDCHAT") != 0);
 }
 
 /*
