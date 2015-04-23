@@ -44,6 +44,13 @@ user localuser;
 user user_table[30];
 int duplicate_count = 0;
 //==================================================================//
+//===========Threads================================================//
+pthread_t udp_thread;
+pthread_t tcp_threadl;
+pthread_t tcp_threadr;
+pthread_t input_thread;
+pthread_t chats_thread;
+pthread_t chatr_thread;
 
 //==========================Thread Globals==========================//
 pthread_mutex_t lock;
@@ -73,14 +80,6 @@ void main(void)
   int                  i;                   // Loop control variable
   char                 *tokens[2];
   
-  //===========Threads================================================//
-  pthread_t udp_thread;
-  pthread_t tcp_threadl;
-  pthread_t tcp_threadr;
-  pthread_t input_thread;
-  pthread_t chats_thread;
-  pthread_t chatr_thread;
-
   pthread_mutex_init(&lock, NULL);    // Create the mutex
   //==================================================================//
   
@@ -200,6 +199,7 @@ void main(void)
      
      comm_buf[ strlen(comm_buf)-1 ] = '\0';
      str_tok(tokens, comm_buf, m_separator);
+     printf("Command: %s\n", tokens[0]);
      if(tokens[0])
        {
 	 if (strcmp(tokens[0], "show") == 0)
@@ -287,7 +287,7 @@ void *tcpthreadl(void *args){
 	pthread_mutex_lock(&lock);
 	tcpl_bool = 1;
 	main_bool = 0;
-	pthread_mutex_unlock(&unlock);
+	pthread_mutex_unlock(&lock);
 	while(1)
 	  {
 	    printf("Would you like to chat with this person? (y or n)\n");
@@ -303,7 +303,16 @@ void *tcpthreadl(void *args){
 		chat_bool = 1;
 		tcpm_bool = 1;
 		tcpl_bool = 0;
-		
+		if(pthread_create(&chatr_thread, NULL, chatrthread, (void *)tcpr_s))
+	{
+	  printf("Error creating chat receive thread");
+	  abort();
+	}
+      if(pthread_create(&chats_thread, NULL, chatsthread, (void *)tcpr_s))
+	{
+	  printf("Error creating chat send thread");
+	  abort();
+	}
 		break;
 	      }
 	    else if(strcmp(out_buf, "n") == 0)
@@ -379,7 +388,7 @@ void *tcpthreadr(void *args){
 	}
       if(pthread_create(&chats_thread, NULL, chatsthread, (void *)tcpr_s))
 	{
-	  printf("Error creating chat receive thread");
+	  printf("Error creating chat send thread");
 	  abort();
 	}
     }
@@ -389,7 +398,7 @@ void *tcpthreadr(void *args){
       tcpa_bool = 0;
       printf("Client declined chat\n");
     }
-  pthread_mutex_unlock(&unlock);
+  pthread_mutex_unlock(&lock);
   fflush(stdout);
 }
 
@@ -430,14 +439,14 @@ void *chatsthread(void *arg){
  */
 
 void *chatrthread(void *arg){
-  char out_buf[BUF_SIZE];
+  char in_buf[BUF_SIZE];
   int retcode;
   char *tokens[2];
   int local_s = (int)arg;
 
   do
     {
-      retcode = recv(tcpr_s, in_buf, sizeof(in_buf));
+      retcode = recv(tcpr_s, in_buf, sizeof(in_buf), 0);
       if(retcode < 0)
 	{
 	  printf("Error with chat receive\n");
@@ -448,7 +457,7 @@ void *chatrthread(void *arg){
 	{
 	  printf("Chat session has been ended\n");
 	  pthread_mutex_lock(&lock);
-	  chatbool = 0;
+	  chat_bool = 0;
 	  tcpm_bool = 0;
 	  main_bool = 1;
 	  retcode = close(tcpr_s);
@@ -456,8 +465,8 @@ void *chatrthread(void *arg){
 	}
       else
 	{
-	  str_tok(tokens, in_buf, separator);
-	  printf(tokens[1]);
+	  str_tok(tokens, in_buf, t_separator);
+	  printf("%s\n", tokens[1]);
 	}
     }while(strcmp(in_buf, "ENDCHAT") != 0);
 }
