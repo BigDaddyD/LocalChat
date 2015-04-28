@@ -176,14 +176,8 @@ void main(void)
      { 
        if(tcp_chat_socket)
 	 {
-	   
-	   printf("You have received a chat request!\n");
-	   printf("Would you like to accept?(y or n)\n");
 	   while(1)
 	     {
-	       memset(comm_buf, 0, sizeof(comm_buf));
-	       fgets(comm_buf, 5, stdin);
-	       comm_buf[ strlen(comm_buf)-1 ] = '\0';
 	       if(strcmp(comm_buf, "y") == 0)
 		 {
 		   printf("Chat accepted\n");
@@ -262,7 +256,7 @@ void main(void)
 		   tcp_chat_socket = 0;
 		 }
 	     }
-	   else if(strcmp(tokens[0], "quit") != 0)
+	   else if(strcmp(tokens[0], "quit") != 0 && strcmp(tokens[0], "y") != 0 && strcmp(tokens[0], "n") != 0)
 	     {
 	       printf("Invalid command\n");
 	       show_cmds();
@@ -326,6 +320,7 @@ void *tcpthread(void *args){
       }
     else
       {
+	printf("Would you like to accept?(y or n)\n");
 	tcp_chat_socket = local_s;
       }
     pthread_mutex_unlock(&lock);
@@ -362,6 +357,7 @@ void chatfunc(void){
 	  strcpy(out_buf, "MSG:");
 	  strcat(out_buf, in_buf);
 	}
+      printf("Function in_buf: %s\n", in_buf);
       retcode = send(local_s, out_buf, sizeof(out_buf), 0);
       if(retcode < 0)
 	{
@@ -389,8 +385,8 @@ void *chatthread(void *arg){
 
   do
     {
-      pthread_mutex_lock(&lock);
       retcode = recv(tcp_chat_socket, in_buf, sizeof(in_buf), 0);
+      printf("In_buf: %s\n", in_buf);
       if(retcode < 0)
 	{
 	  printf("Error with chat receive\n");
@@ -400,16 +396,14 @@ void *chatthread(void *arg){
       if(strcmp(in_buf, "ENDCHAT") == 0)
 	{
 	  printf("Chat session has been ended\n");
-	  retcode = close(tcp_chat_socket);
 	}
       else
 	{
 	  str_tok(tokens, in_buf, t_separator);
 	  printf("%s\n", tokens[1]);
 	}
-        pthread_mutex_unlock(&lock);
-	usleep(5000);
     }while(strcmp(in_buf, "ENDCHAT") != 0);
+  retcode = close(tcp_chat_socket);
 }
 
 /*
