@@ -19,6 +19,7 @@
 #define  BCAST_IP   "192.168.130.255"     // Broadcast IP
 #define  BUF_SIZE               4096      // Max Buffer Size
 
+
 //-----Globals-----------------------------------------------------------------
 
 //==========================Socket Fields===========================//
@@ -26,17 +27,11 @@ int                  addr_len;        // Internet address length
 int                  udp_s;           // UDP Client socket descriptor
 int                  tcpl_s;          // TCP Client listening socket descriptor
 int                  tcpr_s;          // TCP Client requesting socket descriptor
-int                  main_bool = 0;
-int                  tcpl_bool = 0;
-int                  tcpa_bool = 0;
-int                  tcpm_bool = 0;
-int                  chat_bool = 0; 
+int                  tcp_chat_socket = 0;
 char                 t_separator[4] = "::";
 char                 m_separator[3] = " ";
 char                 main_buf[BUF_SIZE];
-char                 tcpl_buf[BUF_SIZE];
-char                 tcpa_buf[BUF_SIZE];
-char                 tcpm_buf[BUF_SIZE];
+char                 chat_buf[BUF_SIZE];
 //==================================================================//
 
 //==========================LocalChat Globals=======================//
@@ -46,11 +41,8 @@ int duplicate_count = 0;
 //==================================================================//
 //===========Threads================================================//
 pthread_t udp_thread;
-pthread_t tcp_threadl;
-pthread_t tcp_threadr;
-pthread_t input_thread;
-pthread_t chats_thread;
-pthread_t chatr_thread;
+pthread_t tcp_thread;
+pthread_t chat_thread;
 
 //==========================Thread Globals==========================//
 pthread_mutex_t lock;
@@ -58,11 +50,9 @@ pthread_mutex_t lock;
 
 //===================Function prototypes=============================//
 void *udpthread(void *arg);
-void *tcpthreadl(void *arg);
-void *tcpthreadr(void *arg);
-void *chatsthread(void *arg);
-void *chatrthread(void *arg);
-void *inputthread(void *arg);
+void *tcpthread(void *arg);
+void *chatthread(void *arg);
+void chatfunc(void);
 void show_cmds(void);
 void str_tok(char** array, char* string, char* separator);
 //====================================================================//
@@ -70,8 +60,11 @@ void str_tok(char** array, char* string, char* separator);
 //=====Main localchat interface==============================================
 void main(void)
 {
+  strcpy(localuser.username, "\n");
   struct sockaddr_in   client_addr;         // Server Internet address
+  struct sockaddr_in   tcp_addr;            // TCP address struct used in main connect()
   char                 out_buf[BUF_SIZE];   // Output buffer for data
+  char                 in_buf[BUF_SIZE];    // Input  buffer for data
   char                 comm_buf[141];       //command line buffer
   int                  retcode;             // Return code
   int                  iOptVal;             // Socket option value
@@ -82,25 +75,20 @@ void main(void)
   
   pthread_mutex_init(&lock, NULL);    // Create the mutex
   //==================================================================//
-  
+   
   //==============================Create User=========================//
   printf("Welcome to Local Chat! :)\n");
   show_cmds();
-  printf("Please enter a desired username: \n");
-  
-  fgets(localuser.username, 31, stdin);
-  
+  while(strcmp(localuser.username, "\n") == 0)
+    {
+      printf("Please enter a desired username: \n");
+      fgets(localuser.username, 31, stdin);
+    }
   // Delete new line from end of entered username
   localuser.username[strlen(localuser.username)-1] = '\0';
   
   printf("You will logged on as %s\n", localuser.username);
 
-  if(pthread_create(&input_thread, NULL, inputthread, NULL))
-     {
-       printf("Error creating input thread");
-       abort();
-     }
-  
   //=======Create Global UDP Socket======================================//
   udp_s = socket(AF_INET, SOCK_DGRAM, 0);  // Create the sockets
   tcpl_s = socket(AF_INET, SOCK_STREAM, 0);
@@ -127,6 +115,10 @@ void main(void)
   client_addr.sin_port = htons(UDP_PORT_NUM);
   client_addr.sin_addr.s_addr = htonl(INADDR_ANY);    // Send and receive on
   // any IP
+
+  //Set up TCP Internet address for use in main
+  tcp_addr.sin_family = AF_INET;
+  tcp_addr.sin_port = htons(TCP_PORT_NUM);
   
   iOptVal = 1;
   iOptLen = sizeof(int);
@@ -163,15 +155,12 @@ void main(void)
        abort();
      }
    
-   if(pthread_create(&tcp_threadl, NULL, tcpthreadl, NULL))
+   if(pthread_create(&tcp_thread, NULL, tcpthread, NULL))
      {
        printf("Error creating tcp thread");
        abort();
      }
-   
-   // Now we're ready to send a HELLO message to other peers
-   printf("Sending HELLO message...\n");
-   
+      
    //Craft Initial Hello message
    strcpy(out_buf, "HELLO::");
    strcat(out_buf, localuser.username);
@@ -183,54 +172,103 @@ void main(void)
    // Send the hello on the broadcast IP
    retcode = sendto(udp_s, out_buf, strlen(out_buf) + 1, 0,
 		    (struct sockaddr *)&client_addr, sizeof(client_addr));
-   main_bool = 1;
-   while(strcmp(comm_buf, "quit") != 0){ 
-     pthread_mutex_lock(&lock);
-     if(main_bool)
-       {
-	 printf("Ready for a command: \n");
-	 memset(comm_buf, 0, sizeof(comm_buf));
-	 if(strlen(main_buf) != 0)
-	   {
-	     strcpy(comm_buf, main_buf);
-	     main_bool = 0;
-	   }
-       }
-     
-     comm_buf[ strlen(comm_buf)-1 ] = '\0';
-     str_tok(tokens, comm_buf, m_separator);
-     printf("Command: %s\n", tokens[0]);
-     if(tokens[0])
-       {
-	 if (strcmp(tokens[0], "show") == 0)
-	   {
-	     show_table();
-	   } 
-	 else if (strcmp(tokens[0], "help") == 0)
-	   {
-	     show_cmds();
-	   }
-	 else if(strcmp(tokens[0], "chat") == 0) 
-	   {
-	     user tuser = fetch_user_by_name(tokens[1]);
-	     if(pthread_create(&tcp_threadr, NULL, tcpthreadr, (void *)&tuser))
-	       {
-		 printf("Error creating tcp thread");
-		 abort();
-	       }
-	   }
-	 else if(strcmp(tokens[0], "quit") != 0)
-	   {
-	     printf("Invalid command\n");
-	     show_cmds();
-	   }
-       }
-     pthread_mutex_unlock(&lock);
-     usleep(50000);
-   }
-  
-
-   
+   while(strcmp(comm_buf, "quit") != 0)
+     { 
+       if(tcp_chat_socket)
+	 {
+	   
+	   printf("You have received a chat request!\n");
+	   printf("Would you like to accept?(y or n)\n");
+	   while(1)
+	     {
+	       memset(comm_buf, 0, sizeof(comm_buf));
+	       fgets(comm_buf, 5, stdin);
+	       comm_buf[ strlen(comm_buf)-1 ] = '\0';
+	       if(strcmp(comm_buf, "y") == 0)
+		 {
+		   printf("Chat accepted\n");
+		   strcpy(out_buf, "CHATY");
+		   send(tcp_chat_socket, out_buf, sizeof(out_buf), 0);
+		   chatfunc();
+		   break;
+		 }
+	       else if(strcmp(comm_buf, "n") == 0)
+		 {
+		   printf("Chat declined\n");
+		   strcpy(out_buf, "CHATN");
+		   send(tcp_chat_socket, out_buf, sizeof(out_buf), 0);
+		   memset(comm_buf, 0, sizeof(comm_buf));
+		   break;
+		 }
+	       else
+		 {
+		   printf("Invalid response\n");
+		 }
+	     }
+	 }
+       printf("Ready for a command:\n");
+       memset(comm_buf, 0, sizeof(comm_buf));
+       fgets(comm_buf, 141, stdin);
+       comm_buf[ strlen(comm_buf)-1 ] = '\0';
+       str_tok(tokens, comm_buf, m_separator);
+       if(tokens[0])
+	 {
+	   if(strcmp(tokens[0], "show") == 0)
+	     {
+	       show_table();
+	     } 
+	   else if (strcmp(tokens[0], "help") == 0)
+	     {
+	       show_cmds();
+	     }
+	   else if(strcmp(tokens[0], "chat") == 0) 
+	     {
+	       user tuser = fetch_user_by_name(tokens[1]);
+	       tcp_addr.sin_addr = tuser.user_ip_addr;
+	       tcp_chat_socket = tcpr_s;
+	       retcode = connect(tcp_chat_socket, (struct sockaddr *)&tcp_addr, sizeof(tcp_addr));	   
+	       if (retcode < 0)
+		 {
+		   printf("Error with connect\n");
+		   exit(-1);
+		 }
+	       strcpy(out_buf, "CHATREQ");
+	       retcode = send(tcp_chat_socket, out_buf, (strlen(out_buf) + 1), 0);
+	       if (retcode < 0)
+		 {
+		   printf("Error with send\n");
+		   exit(-1);
+		 }
+	       retcode = recv(tcp_chat_socket, in_buf, sizeof(in_buf), 0);
+	       if (retcode < 0)
+		 {
+		   printf("Error with receive\n");
+		   abort();
+		 }
+	       if(strcmp(in_buf, "CHATY") == 0)
+		 {
+		   printf("Chat request accepted\n");
+		   if(pthread_create(&chat_thread, NULL, chatthread, (void *)&tuser))
+		     {
+		       printf("Error creating receiving thread\n");
+		       abort();
+		     }
+		   
+		   chatfunc();
+		 }
+	       else if(strcmp(in_buf, "CHATN") == 0) 
+		 {
+		   printf("Chat declined\n");
+		   tcp_chat_socket = 0;
+		 }
+	     }
+	   else if(strcmp(tokens[0], "quit") != 0)
+	     {
+	       printf("Invalid command\n");
+	       show_cmds();
+	     }
+	 }
+     }
    client_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
    strcpy(out_buf, "BYE::");
    strcat(out_buf, localuser.username);
@@ -244,8 +282,7 @@ void main(void)
      printf("Sending bye didn't work. retcode = %d\n", retcode);
    }
    
-   pthread_kill(udp_thread, 15);
-   
+   pthread_kill(udp_thread, 15);   
    
    pthread_mutex_destroy(&lock);
    printf("Exiting...\n");
@@ -254,10 +291,10 @@ void main(void)
 } // end main
 
 /*
- * TCP thread to handle messaging sessions
+ * TCP thread to handle incoming connection requests
  */
 
-void *tcpthreadl(void *args){
+void *tcpthread(void *args){
   char in_buf[BUF_SIZE];
   char out_buf[BUF_SIZE];
   struct sockaddr_in thread_addr;
@@ -273,132 +310,27 @@ void *tcpthreadl(void *args){
   recv(local_s, in_buf, sizeof(in_buf), 0);
   if (retcode < 0)
       {
-	printf("Error with recvfrom in tcpthreadl\n");
+	printf("Error with recv in tcpthread\n");
 	exit(-1);
       }
 
   printf("In_buf: %s\n", in_buf); 
 
+  pthread_mutex_lock(&lock);
   if(strcmp(in_buf, "CHATREQ") == 0){
     printf("You have received a chat request from %s\n", inet_ntoa(thread_addr.sin_addr));
-    
-    if(!chat_bool)
-      {
-	pthread_mutex_lock(&lock);
-	tcpl_bool = 1;
-	main_bool = 0;
-	pthread_mutex_unlock(&lock);
-	while(1)
-	  {
-	    printf("Would you like to chat with this person? (y or n)\n");
-	    memset(out_buf, 0, sizeof(out_buf));
-	    pthread_mutex_lock(&lock);
-	    strcpy(out_buf, tcpl_buf);
-	    printf("%s", out_buf);
-	    out_buf[strlen(out_buf) - 1] = '\0';
-	    if(strcmp(out_buf, "y") == 0)
-	      {
-		strcpy(out_buf, "CHATY");
-		send(local_s, out_buf, sizeof(out_buf), 0);
-		chat_bool = 1;
-		tcpm_bool = 1;
-		tcpl_bool = 0;
-		if(pthread_create(&chatr_thread, NULL, chatrthread, (void *)tcpr_s))
-	{
-	  printf("Error creating chat receive thread");
-	  abort();
-	}
-      if(pthread_create(&chats_thread, NULL, chatsthread, (void *)tcpr_s))
-	{
-	  printf("Error creating chat send thread");
-	  abort();
-	}
-		break;
-	      }
-	    else if(strcmp(out_buf, "n") == 0)
-	      {
-		strcpy(out_buf, "CHATN");
-		send(local_s, out_buf, sizeof(out_buf), 0);
-		tcpl_bool = 0;
-		main_bool = 1;
-		break;
-	      }
-	    else
-	      {
-		printf("Invalid response\n");
-		printf("Valid responses are (n)o or (y)es\n");
-	      }
-	    pthread_mutex_unlock(&lock);
-	    usleep(50000);
-	  }
-      }
-    else
+    if(tcp_chat_socket)
       {
 	strcpy(out_buf, "CHATN");
 	send(local_s, out_buf, sizeof(out_buf), 0);
       }
+    else
+      {
+	tcp_chat_socket = local_s;
+      }
+    pthread_mutex_unlock(&lock);
+    usleep(5000);
   }
-  fflush(stdout);
-}
-
-void *tcpthreadr(void *args){
-  char in_buf[BUF_SIZE];
-  char out_buf[BUF_SIZE];
-  struct sockaddr_in thread_addr;
-  user temp;
-  int retcode;
-  user temp_user;
-  memcpy(&temp_user, args, sizeof(user));
-  thread_addr.sin_family = AF_INET;
-  thread_addr.sin_port = htons(TCP_PORT_NUM);
-  thread_addr.sin_addr = temp_user.user_ip_addr;
-  char *tokens[2];
-  retcode = connect(tcpr_s, (struct sockaddr *)&thread_addr, sizeof(thread_addr));
-  
-  if (retcode < 0)
-      {
-	printf("Error with connect\n");
-	exit(-1);
-      }
-  strcpy(out_buf, "CHATREQ");
-  retcode = send(tcpr_s, out_buf, (strlen(out_buf) + 1), 0);
-  if (retcode < 0)
-      {
-	printf("Error with send in tcpthreadr\n");
-	exit(-1);
-      }
-  
-  retcode = recv(tcpr_s, in_buf, sizeof(in_buf), 0);
-  if (retcode < 0)
-    {
-      printf("Error with recv in tcpthreadr\n");
-      exit(-1);
-    }
-  
-  pthread_mutex_lock(&lock);
-  if(strcmp(in_buf, "CHATY") == 0)
-    {
-      chat_bool = 1;
-      tcpm_bool = 1;
-      tcpa_bool = 0;
-      if(pthread_create(&chatr_thread, NULL, chatrthread, (void *)tcpr_s))
-	{
-	  printf("Error creating chat receive thread");
-	  abort();
-	}
-      if(pthread_create(&chats_thread, NULL, chatsthread, (void *)tcpr_s))
-	{
-	  printf("Error creating chat send thread");
-	  abort();
-	}
-    }
-  else
-    {
-      main_bool = 1;
-      tcpa_bool = 0;
-      printf("Client declined chat\n");
-    }
-  pthread_mutex_unlock(&lock);
   fflush(stdout);
 }
 
@@ -406,16 +338,30 @@ void *tcpthreadr(void *args){
  * Main TCP Chat send thread
  */
 
-void *chatsthread(void *arg){
+void chatfunc(void){
   char out_buf[BUF_SIZE];
+  char in_buf[BUF_SIZE];
   int retcode;
   char *tokens[2];
-  int local_s = (int)arg;
-  
+
+  int local_s = tcp_chat_socket;
+  printf("You are now chatting\n");
   do
     {
-      pthread_mutex_lock(&lock);
-      strcpy(out_buf, tcpm_buf);
+      memset(out_buf, 0, sizeof(out_buf));
+      memset(in_buf, 0, sizeof(in_buf));
+      fgets(in_buf, 141, stdin);
+      in_buf[ strlen(in_buf)-1 ] = '\0';
+      if(strcmp(in_buf, "end") == 0)
+	{
+	  printf("Ending chat session\n");
+	  strcpy(out_buf, "ENDCHAT");
+	}
+      else
+	{
+	  strcpy(out_buf, "MSG:");
+	  strcat(out_buf, in_buf);
+	}
       retcode = send(local_s, out_buf, sizeof(out_buf), 0);
       if(retcode < 0)
 	{
@@ -425,28 +371,26 @@ void *chatsthread(void *arg){
       if(strcmp(out_buf, "ENDCHAT") == 0)
 	{
 	  printf("Ending chat session\n");
-	  close(local_s);
-	  main_bool = 1;
-	  chat_bool = 0;
-	  tcpm_bool = 0;
 	}
-      pthread_mutex_unlock(&lock);
     }while(strcmp(out_buf, "ENDCHAT") != 0);
+  tcp_chat_socket = 0;
+  close(local_s);
 }
+      
 
 /*
  * Main TCP Chat receive thread
  */
 
-void *chatrthread(void *arg){
+void *chatthread(void *arg){
   char in_buf[BUF_SIZE];
   int retcode;
   char *tokens[2];
-  int local_s = (int)arg;
 
   do
     {
-      retcode = recv(tcpr_s, in_buf, sizeof(in_buf), 0);
+      pthread_mutex_lock(&lock);
+      retcode = recv(tcp_chat_socket, in_buf, sizeof(in_buf), 0);
       if(retcode < 0)
 	{
 	  printf("Error with chat receive\n");
@@ -456,18 +400,15 @@ void *chatrthread(void *arg){
       if(strcmp(in_buf, "ENDCHAT") == 0)
 	{
 	  printf("Chat session has been ended\n");
-	  pthread_mutex_lock(&lock);
-	  chat_bool = 0;
-	  tcpm_bool = 0;
-	  main_bool = 1;
-	  retcode = close(tcpr_s);
-	  pthread_mutex_unlock(&lock);
+	  retcode = close(tcp_chat_socket);
 	}
       else
 	{
 	  str_tok(tokens, in_buf, t_separator);
 	  printf("%s\n", tokens[1]);
 	}
+        pthread_mutex_unlock(&lock);
+	usleep(5000);
     }while(strcmp(in_buf, "ENDCHAT") != 0);
 }
 
@@ -581,28 +522,4 @@ void str_tok(char** array, char* string, char* seperator){
     }
 }
 
-void *inputthread(void *arg){
-  char local_buf[BUF_SIZE];
-  while(1){
-    memset(local_buf, 0, sizeof(local_buf));
-    pthread_mutex_lock(&lock);
-    memset(main_buf, 0, sizeof(main_buf));
-    memset(tcpl_buf, 0, sizeof(tcpl_buf));
-    memset(tcpa_buf, 0, sizeof(tcpa_buf));
-    memset(tcpm_buf, 0, sizeof(tcpm_buf));
 
-    fgets(local_buf, BUF_SIZE, stdin);
-
-    if(main_bool){
-      strcpy(main_buf, local_buf);
-    }else if(tcpl_bool){
-      strcpy(tcpl_buf, local_buf);
-    }else if(tcpa_bool){
-      strcpy(tcpa_buf, local_buf);
-    }else if(tcpm_bool){
-      strcpy(tcpm_buf, local_buf);
-    }
-    pthread_mutex_unlock(&lock);
-    usleep(50000);
-  }
-}
