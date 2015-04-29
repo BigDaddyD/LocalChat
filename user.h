@@ -20,6 +20,8 @@ typedef struct users{
 
 uint32_t get_user_ip_addr(user u);
 
+char* get_username(user u);
+
 user create_user(struct in_addr ip, char* name);
 
 #endif
