@@ -28,7 +28,7 @@ int                  udp_s;           // UDP Client socket descriptor
 int                  tcpl_s;          // TCP Client listening socket descriptor
 int                  tcpr_s;          // TCP Client requesting socket descriptor
 int                  tcp_chat_socket = 0;
-char                 t_separator[4] = "::";
+char                 t_separator[4] = ":";
 char                 m_separator[3] = " ";
 char                 main_buf[BUF_SIZE];
 char                 chat_buf[BUF_SIZE];
@@ -162,7 +162,7 @@ void main(void)
      }
       
    //Craft Initial Hello message
-   strcpy(out_buf, "HELLO::");
+   strcpy(out_buf, "HELLO:");
    strcat(out_buf, localuser.username);
    strcpy(comm_buf, out_buf);
    
@@ -227,7 +227,7 @@ void main(void)
 		   exit(-1);
 		 }
 	       strcpy(out_buf, "CHATREQ");
-	       retcode = send(tcp_chat_socket, out_buf, (strlen(out_buf) + 1), 0);
+	       retcode = send(tcp_chat_socket, out_buf, sizeof(out_buf), 0);
 	       if (retcode < 0)
 		 {
 		   printf("Error with send\n");
@@ -242,12 +242,11 @@ void main(void)
 	       if(strcmp(in_buf, "CHATY") == 0)
 		 {
 		   printf("Chat request accepted\n");
-		   if(pthread_create(&chat_thread, NULL, chatthread, (void *)&tuser))
-		     {
-		       printf("Error creating receiving thread\n");
-		       abort();
-		     }
-		   
+		   if(pthread_create(&chat_thread, NULL, chatthread, (void *)&tcp_chat_socket))
+		   {
+		     printf("Error creating receiving thread\n");
+		     abort();
+		   }
 		   chatfunc();
 		 }
 	       else if(strcmp(in_buf, "CHATN") == 0) 
@@ -264,7 +263,7 @@ void main(void)
 	 }
      }
    client_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
-   strcpy(out_buf, "BYE::");
+   strcpy(out_buf, "BYE:");
    strcat(out_buf, localuser.username);
    retcode = sendto(udp_s, out_buf, strlen(out_buf) + 1, 0,
 		    (struct sockaddr *)&client_addr, sizeof(client_addr));
@@ -322,9 +321,9 @@ void *tcpthread(void *args){
       {
 	printf("Would you like to accept?(y or n)\n");
 	tcp_chat_socket = local_s;
+	printf("Listen thread TCP chat socket: %d\n", tcp_chat_socket);
       }
     pthread_mutex_unlock(&lock);
-    usleep(5000);
   }
   fflush(stdout);
 }
@@ -354,11 +353,21 @@ void chatfunc(void){
 	}
       else
 	{
-	  strcpy(out_buf, "MSG:");
-	  strcat(out_buf, in_buf);
+	  if(strcmp(out_buf, "\n") != 0)
+	    {
+	      strcpy(out_buf, "MSG:");
+	      strcat(out_buf, in_buf);
+	    }
+	  else
+	    {
+	      printf("Tried to send new line\n");
+	    }
 	}
       printf("Function in_buf: %s\n", in_buf);
-      retcode = send(local_s, out_buf, sizeof(out_buf), 0);
+      if(strcmp(out_buf, "\n") != 0)
+	{
+	  retcode = send(local_s, out_buf, sizeof(out_buf), 0);
+	}
       if(retcode < 0)
 	{
 	  printf("Error with chat send\n");
@@ -380,28 +389,36 @@ void chatfunc(void){
 
 void *chatthread(void *arg){
   char in_buf[BUF_SIZE];
-  int retcode;
+  int retcode = 0;
   char *tokens[2];
-
+  int local_s = *((int *)arg);
+  printf("Local socket: %d\n", local_s);
   do
     {
-      retcode = recv(tcp_chat_socket, in_buf, sizeof(in_buf), 0);
-      printf("In_buf: %s\n", in_buf);
-      if(retcode < 0)
-	{
-	  printf("Error with chat receive\n");
-	  exit(-1);
+      memset(in_buf, 0, sizeof(in_buf));
+      retcode = recv(local_s, in_buf, sizeof(in_buf), 0);
+      //printf("Retcode: %d", retcode);
+      if(retcode > 0)
+	{ 
+	  // printf("in_buf: %s\n", in_buf);
+	  if(strcmp(in_buf, "ENDCHAT") == 0)
+	    {
+	      printf("Chat session has been ended\n");
+	    }
+	  else
+	    {
+	      str_tok(tokens, in_buf, t_separator);
+	      if(tokens[0])
+		{
+		  printf("%s\n", tokens[1]);
+		}
+	    }
 	}
-      
-      if(strcmp(in_buf, "ENDCHAT") == 0)
-	{
-	  printf("Chat session has been ended\n");
-	}
-      else
-	{
-	  str_tok(tokens, in_buf, t_separator);
-	  printf("%s\n", tokens[1]);
-	}
+      else if(retcode < 0)
+	    {
+	      printf("Error with chat receive\n");
+	      exit(-1);
+	    }
     }while(strcmp(in_buf, "ENDCHAT") != 0);
   retcode = close(tcp_chat_socket);
 }
@@ -442,9 +459,9 @@ void *udpthread(void *arg) {
 	    if(strcmp(temp.username, localuser.username) != 0)
 	      {
 		memset(out_buf, 0, sizeof(out_buf));
-		strcpy(out_buf, "OK::");
+		strcpy(out_buf, "OK:");
 		strcat(out_buf, localuser.username);
-		strcat(out_buf, "::Y");
+		strcat(out_buf, ":Y");
 		retcode = sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0,
 				 (struct sockaddr *)&thread_addr, sizeof(thread_addr));
 	      }
@@ -452,9 +469,9 @@ void *udpthread(void *arg) {
 	else
 	  {
 	    memset(out_buf, 0, sizeof(out_buf));
-	    strcpy(out_buf, "OK::");
+	    strcpy(out_buf, "OK:");
 	    strcat(out_buf, localuser.username);
-	    strcat(out_buf, "::N::");
+	    strcat(out_buf, ":N:");
 	    strcat(out_buf, tokens[1]);
 	    retcode = sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0,
 			     (struct sockaddr *)&thread_addr, sizeof(thread_addr));
@@ -475,7 +492,7 @@ void *udpthread(void *arg) {
 	    char d[5];
 	    snprintf(d, 5, "%d", duplicate_count);
 	    memset(out_buf, 0, sizeof(out_buf));
-	    strcpy(out_buf, "HELLO::");
+	    strcpy(out_buf, "HELLO:");
 	    strcat(out_buf, tokens[3]);
 	    strcat(out_buf, d);
 	    printf("Username was not available, adjusting...\n");
