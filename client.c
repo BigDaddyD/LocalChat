@@ -371,14 +371,10 @@ void *tcpthread(void *args)
   thread_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   char *tokens[2];
   int local_s;
-  printf("Made it to accept thread\n");
   while(1)
     {
       local_s = accept(tcpl_s, (struct sockaddr *)&thread_addr, &addr_len);
-      printf("Accepted connection\n");
       recv(local_s, in_buf, sizeof(in_buf), 0);
-      printf("Received buffer\n");
-      printf("retcode: %d", retcode);
       if (retcode < 0)
 	{
 	  printf("Error with recv in tcpthread\n");
@@ -519,84 +515,83 @@ void *udpthread(void *arg)
   int retcode;
   thread_addr.sin_family = AF_INET;
   thread_addr.sin_port = htons(UDP_PORT_NUM);
-  do {
-    thread_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    retcode = recvfrom(udp_s, in_buf, sizeof(in_buf), 0,
-		       (struct sockaddr *)&thread_addr, &addr_len);
-    printf("Received packet\n");
-    printf("in_buf: %s\n",in_buf);
-    if (retcode < 0)
-      {
-	printf("Error with recvfrom\n");
-	exit(-1);
-      }
-    
-    str_tok(tokens, in_buf, t_separator);
-    
-    if (strcmp(tokens[0], "HELLO") == 0)
-      {
+  while(1) 
+    {
+      thread_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+      retcode = recvfrom(udp_s, in_buf, sizeof(in_buf), 0,
+			 (struct sockaddr *)&thread_addr, &addr_len);
+      if (retcode < 0)
+	{
+	  printf("Error with recvfrom\n");
+	  exit(-1);
+	}
+      
+      str_tok(tokens, in_buf, t_separator);
+      
+      if (strcmp(tokens[0], "HELLO") == 0)
+	{
+	  temp = fetch_user_by_name(tokens[1]);
+	  if(strcmp(temp.username, DNE) == 0)
+	    {
+	      strcpy(temp.username, tokens[1]);
+	      temp.user_ip_addr = thread_addr.sin_addr;
+	      add_user(temp);
+	      if(strcmp(temp.username, localuser.username) != 0)
+		{
+		  memset(out_buf, 0, sizeof(out_buf));
+		  strcpy(out_buf, "OK:");
+		  strcat(out_buf, localuser.username);
+		  strcat(out_buf, ":Y");
+		  retcode = sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0,
+				   (struct sockaddr *)&thread_addr, sizeof(thread_addr));
+		}
+	    }
+	  else
+	    {
+	      memset(out_buf, 0, sizeof(out_buf));
+	      strcpy(out_buf, "OK:");
+	      strcat(out_buf, localuser.username);
+	      strcat(out_buf, ":N:");
+	      strcat(out_buf, tokens[1]);
+	      retcode = sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0,
+			       (struct sockaddr *)&thread_addr, sizeof(thread_addr));
+	    }
+	}
+      else if(strcmp(tokens[0], "OK") == 0)
+	{
+	  if(strcmp(tokens[2], "Y") == 0)
+	    {
+	      temp = create_user(thread_addr.sin_addr, tokens[1]);
+	      add_user(temp);
+	      duplicate_count = 0;	    
+	    }
+	  else
+	    {
+	      duplicate_count++;
+	      char d[5];
+	      snprintf(d, 5, "%d", duplicate_count);
+	      memset(out_buf, 0, sizeof(out_buf));
+	      strcpy(out_buf, "HELLO:");
+	      strcat(out_buf, tokens[3]);
+	      strcat(out_buf, d);
+	      printf("Username was not available, adjusting...\n");
+	      clear_table();
+	      strcpy(localuser.username, tokens[3]);
+	      strcat(localuser.username, d);
+	      printf("Trying %s...\n", localuser.username);
+	      thread_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
+	      sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0, 
+		     (struct sockaddr *)&thread_addr, sizeof(thread_addr));
+	    }
+	  
+	} 
+      else if(strcmp(tokens[0], "BYE") == 0) {
 	temp = fetch_user_by_name(tokens[1]);
-	if(strcmp(temp.username, DNE) == 0)
-	  {
-	    strcpy(temp.username, tokens[1]);
-	    temp.user_ip_addr = thread_addr.sin_addr;
-	    add_user(temp);
-	    if(strcmp(temp.username, localuser.username) != 0)
-	      {
-		memset(out_buf, 0, sizeof(out_buf));
-		strcpy(out_buf, "OK:");
-		strcat(out_buf, localuser.username);
-		strcat(out_buf, ":Y");
-		retcode = sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0,
-				 (struct sockaddr *)&thread_addr, sizeof(thread_addr));
-	      }
-	  }
-	else
-	  {
-	    memset(out_buf, 0, sizeof(out_buf));
-	    strcpy(out_buf, "OK:");
-	    strcat(out_buf, localuser.username);
-	    strcat(out_buf, ":N:");
-	    strcat(out_buf, tokens[1]);
-	    retcode = sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0,
-			     (struct sockaddr *)&thread_addr, sizeof(thread_addr));
-	  }
+	remove_user(temp);
       }
-    else if(strcmp(tokens[0], "OK") == 0)
-      {
-	if(strcmp(tokens[2], "Y") == 0)
-	  {
-	    temp = create_user(thread_addr.sin_addr, tokens[1]);
-	    add_user(temp);
-	    duplicate_count = 0;	    
-	  }
-	else
-	  {
-	    duplicate_count++;
-	    char d[5];
-	    snprintf(d, 5, "%d", duplicate_count);
-	    memset(out_buf, 0, sizeof(out_buf));
-	    strcpy(out_buf, "HELLO:");
-	    strcat(out_buf, tokens[3]);
-	    strcat(out_buf, d);
-	    printf("Username was not available, adjusting...\n");
-	    clear_table();
-	    strcpy(localuser.username, tokens[3]);
-	    strcat(localuser.username, d);
-	    printf("Trying %s...\n", localuser.username);
-	    thread_addr.sin_addr.s_addr = inet_addr(BCAST_IP);
-	    sendto(udp_s, out_buf, (strlen(out_buf) + 1), 0, 
-		   (struct sockaddr *)&thread_addr, sizeof(thread_addr));
-	  }
-
-      } 
-    else if(strcmp(tokens[0], "BYE") == 0) {
-      temp = fetch_user_by_name(tokens[1]);
-      remove_user(temp);
+      
+      fflush(stdout);
     }
-    
-    fflush(stdout);
-  } while (strcmp(tokens[0], "BYE") != 0);
 } // end udpthread
 
 void show_cmds(void)
