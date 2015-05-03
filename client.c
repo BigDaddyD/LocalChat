@@ -490,7 +490,7 @@ void *chatrthread(void *arg)
 		{
 		  strcpy(string, (in_buf + count));
 		}
-	      printf("%s\n", string);
+	      printf(">>> %s\n", string);
 	    }
 	}
       else if(retcode < 0)
